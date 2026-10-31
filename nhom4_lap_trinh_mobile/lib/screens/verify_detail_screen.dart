@@ -169,7 +169,7 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isValid ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+        color: isValid ? Colors.green.withValues(alpha: 0.12) : Colors.red.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: isValid ? Colors.green : Colors.red,
@@ -315,7 +315,7 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceVariant.withOpacity(0.4),
+              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
             ),
             child: SelectableText(

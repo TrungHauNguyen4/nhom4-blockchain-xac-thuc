@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -76,7 +76,7 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    item.issuerName ?? 'Đơn vị đào tạo',
+                    item.issuerName,
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 16),
