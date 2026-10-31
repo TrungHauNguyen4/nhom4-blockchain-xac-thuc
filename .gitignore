@@ -1,0 +1,27 @@
+# 1. Bảo mật Backend & Node.js (TUYỆT ĐỐI KHÔNG ĐẨY LÊN GITHUB)
+**/node_modules/
+**/.env
+**/.env.local
+BlockChain_chu_ky_so/backend/cache/
+BlockChain_chu_ky_so/backend/artifacts/
+
+# 2. File build và rác hệ thống của Flutter & Dart
+**/build/
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.pub-cache/
+**/*.iml
+**/.idea/
+.vscode/
+__MACOSX/
+Bai giang dart/
+btlaptrinhmobile/
+flutter/
+flutter_demo/
+hoc_dart/
+package.json
+package-lock.json
+# 3. File rác hệ điều hành
+.DS_Store
+Thumbs.db
