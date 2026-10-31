@@ -4,6 +4,8 @@
 **/.env.local
 BlockChain_chu_ky_so/backend/cache/
 BlockChain_chu_ky_so/backend/artifacts/
+BlockChain_chu_ky_so/backend/uploads/*
+!BlockChain_chu_ky_so/backend/uploads/.gitkeep
 
 # 2. File build và rác hệ thống của Flutter & Dart
 **/build/
@@ -20,8 +22,12 @@ btlaptrinhmobile/
 flutter/
 flutter_demo/
 hoc_dart/
-package.json
-package-lock.json
-# 3. File rác hệ điều hành
+/package.json
+/package-lock.json
+
+# 3. File rác hệ điều hành & Office tạm
 .DS_Store
 Thumbs.db
+~$*
+
+~$*

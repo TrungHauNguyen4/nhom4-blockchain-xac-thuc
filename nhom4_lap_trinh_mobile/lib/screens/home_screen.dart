@@ -8,6 +8,7 @@ import '../services/hash_service.dart';
 import '../services/db_service.dart';
 import '../models/certificate_record.dart';
 import '../providers/theme_provider.dart';
+import '../widgets/progress_stream_card.dart';
 import 'qr_scanner_screen.dart';
 import 'verify_detail_screen.dart';
 
@@ -20,7 +21,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
-  final ApiService _apiService = ApiService();
+  HashAlgorithm _selectedAlgorithm = HashAlgorithm.keccak256;
 
   // Controller nhập Hash thủ công
   final TextEditingController _hashInputController = TextEditingController();
@@ -40,11 +41,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadOfflineVault() async {
     setState(() => _isLoadingVault = true);
-    final list = await DatabaseService.instance.getAllCertificates();
-    setState(() {
-      _offlineVault = list;
-      _isLoadingVault = false;
-    });
+    try {
+      final list = await DatabaseService.instance.getAllCertificates();
+      if (!mounted) return;
+      setState(() {
+        _offlineVault = list;
+        _isLoadingVault = false;
+      });
+    } catch (e) {
+      debugPrint('[HomeScreen] Bỏ qua đọc Sqflite trên môi trường không hỗ trợ: $e');
+      if (!mounted) return;
+      setState(() => _isLoadingVault = false);
+    }
   }
 
   // Thao tác 1: Chọn file PDF/Ảnh từ máy -> Băm Keccak256 trên RAM -> Verify
@@ -69,15 +77,19 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
 
+        if (!mounted) return;
+        final apiService = context.read<ApiService>();
         setState(() {
           _verificationStream = HashService.verifyFileStream(
             fileBytes: bytes,
             fileName: file.name,
-            apiService: _apiService,
+            apiService: apiService,
+            algorithm: _selectedAlgorithm,
           );
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Lỗi chọn file: $e')),
       );
@@ -108,10 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
+    final apiService = context.read<ApiService>();
     setState(() {
       _verificationStream = HashService.verifyHashStream(
         dataHash: clean,
-        apiService: _apiService,
+        apiService: apiService,
         fileName: fileName,
       );
     });
@@ -247,6 +260,33 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
+          // Tùy chọn thuật toán băm trên RAM (Keccak-256 mặc định / SHA-256)
+          Row(
+            children: [
+              const Text(
+                'Thuật toán băm RAM: ',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('Keccak-256'),
+                selected: _selectedAlgorithm == HashAlgorithm.keccak256,
+                onSelected: (_) {
+                  setState(() => _selectedAlgorithm = HashAlgorithm.keccak256);
+                },
+              ),
+              const SizedBox(width: 8),
+              ChoiceChip(
+                label: const Text('SHA-256'),
+                selected: _selectedAlgorithm == HashAlgorithm.sha256,
+                onSelected: (_) {
+                  setState(() => _selectedAlgorithm = HashAlgorithm.sha256);
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+
           // Ô nhập mã Hash thủ công
           Card(
             child: Padding(
@@ -275,140 +315,26 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 20),
 
           // TIÊU CHÍ BẮT BUỘC: Xử lý thời gian thực bằng StreamBuilder (async*/yield)
-          if (_verificationStream != null) _buildStreamBuilderCard(),
-        ],
-      ),
-    );
-  }
-
-  // Khối hiển thị tiến trình xác thực Realtime bằng StreamBuilder
-  Widget _buildStreamBuilderCard() {
-    return StreamBuilder<VerificationProgress>(
-      stream: _verificationStream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
-
-        final data = snapshot.data!;
-        final bool isDone = data.progress >= 1.0;
-        final bool isValid = data.step == VerificationStep.verifiedValid;
-
-        return Card(
-          color: isDone
-              ? (isValid ? Colors.green.withOpacity(0.08) : Colors.red.withOpacity(0.08))
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Tiến trình thẩm định:',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
-                    ),
-                    Text('${(data.progress * 100).toInt()}%',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: data.progress,
-                  backgroundColor: Colors.grey.shade300,
-                  color: isDone
-                      ? (isValid ? Colors.green : Colors.red)
-                      : Theme.of(context).colorScheme.primary,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    if (!isDone)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(
-                        isValid ? Icons.check_circle : Icons.error,
-                        color: isValid ? Colors.green : Colors.red,
-                        size: 20,
-                      ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            data.statusMessage,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
-                              color: isDone ? (isValid ? Colors.green.shade800 : Colors.red.shade800) : null,
-                            ),
-                          ),
-                          if (data.errorMessage != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Chi tiết: ${data.errorMessage}',
-                              style: const TextStyle(fontSize: 11, color: Colors.redAccent),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (data.hash != null) ...[
-                  const SizedBox(height: 10),
-                  Text('Mã Hash: ${data.hash}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.grey)),
-                ],
-                if (isDone) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.arrow_forward),
-                      label: const Text('Xem Chi Tiết Chứng Nhận'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isValid ? Colors.green : Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        final targetHash = (data.hash != null && data.hash!.isNotEmpty)
-                            ? data.hash!
-                            : _hashInputController.text;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => VerifyDetailScreen(
-                              record: data.record,
-                              searchedHash: targetHash.isEmpty ? 'Chưa xác định' : targetHash,
-                            ),
-                          ),
-                        ).then((_) => _loadOfflineVault());
-                      },
+          if (_verificationStream != null)
+            ProgressStreamCard.verification(
+              stream: _verificationStream!,
+              onViewVerificationDetail: (data) {
+                final targetHash = (data.hash != null && data.hash!.isNotEmpty)
+                    ? data.hash!
+                    : _hashInputController.text;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VerifyDetailScreen(
+                      record: data.record,
+                      searchedHash: targetHash.isEmpty ? 'Chưa xác định' : targetHash,
                     ),
                   ),
-                ],
-              ],
+                ).then((_) => _loadOfflineVault());
+              },
             ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -555,10 +481,11 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     ElevatedButton(
                       child: const Text('Lưu Địa Chỉ'),
-                      onPressed: () {
-                        ApiService.updateBaseUrl(ipController.text);
+                      onPressed: () async {
+                        await ApiService.saveBaseUrl(ipController.text);
+                        if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Đã cập nhật máy chủ: ${ApiService.baseUrl}')),
+                          SnackBar(content: Text('Đã lưu máy chủ: ${ApiService.baseUrl}')),
                         );
                       },
                     ),
@@ -566,17 +493,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     OutlinedButton(
                       child: const Text('Thử Kết Nối'),
                       onPressed: () async {
-                        final ok = await _apiService.checkServerHealth();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: ok ? Colors.green : Colors.red,
-                              content: Text(ok
-                                  ? '✅ Kết nối Backend Node.js thành công!'
-                                  : '❌ Không thể kết nối tới Backend tại ${ApiService.baseUrl}'),
-                            ),
-                          );
-                        }
+                        final apiService = context.read<ApiService>();
+                        final ok = await apiService.checkServerHealth();
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            backgroundColor: ok ? Colors.green : Colors.red,
+                            content: Text(ok
+                                ? '✅ Kết nối Backend Node.js thành công!'
+                                : '❌ Không thể kết nối tới Backend tại ${ApiService.baseUrl}'),
+                          ),
+                        );
                       },
                     ),
                   ],
