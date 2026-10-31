@@ -4,6 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:nhom4_lap_trinh_mobile/main.dart';
+import 'package:nhom4_lap_trinh_mobile/models/user_model.dart';
+import 'package:nhom4_lap_trinh_mobile/providers/auth_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/providers/theme_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/hash_service.dart';
@@ -52,18 +54,69 @@ void main() {
     expect(events.last.txHash, isNotNull);
   });
 
-  testWidgets('Khung MultiProvider & giao diện chính khởi chạy ổn định', (WidgetTester tester) async {
+  test('UserModel chuyển đổi JSON & phân quyền 3 vai trò chính xác', () {
+    const staff = UserModel(
+      uid: 'staff_123',
+      name: 'ThS. Nguyễn Văn A',
+      email: 'canbo@edu.vn',
+      role: UserRole.staff,
+      organization: 'Đại học Bách Khoa',
+      createdAt: '31/10/2026 12:00:00',
+    );
+
+    expect(staff.isStaff, isTrue);
+    expect(staff.isEmployer, isFalse);
+    expect(staff.isStudent, isFalse);
+    expect(staff.roleTitle, 'Cán bộ đào tạo');
+
+    // Test serialization
+    final json = staff.toJson();
+    final fromJson = UserModel.fromJson(json);
+    expect(fromJson.uid, staff.uid);
+    expect(fromJson.name, staff.name);
+    expect(fromJson.role, staff.role);
+    expect(fromJson.organization, staff.organization);
+  });
+
+  test('AuthProvider xử lý đăng nhập tài khoản demo và đổi vai trò mượt mà', () async {
+    SharedPreferences.setMockInitialValues({});
+    final auth = AuthProvider();
+
+    // Đăng nhập cán bộ
+    final okStaff = await auth.login('canbo@edu.vn', '123456');
+    expect(okStaff, isTrue);
+    expect(auth.isAuthenticated, isTrue);
+    expect(auth.isStaff, isTrue);
+    expect(auth.currentUser?.role, UserRole.staff);
+
+    // Chuyển nhanh sang nhà tuyển dụng để demo
+    auth.switchRoleForDemo(UserRole.employer);
+    expect(auth.isEmployer, isTrue);
+    expect(auth.currentUser?.roleTitle, 'Nhà tuyển dụng');
+
+    // Đăng xuất
+    await auth.logout();
+    expect(auth.isAuthenticated, isFalse);
+    expect(auth.currentUser, isNull);
+  });
+
+  testWidgets('Khung MultiProvider & AuthGate khởi chạy hiển thị màn hình Auth khi chưa đăng nhập', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
     await tester.pumpWidget(
       MultiProvider(
         providers: [
           Provider<ApiService>(create: (_) => ApiService()),
           ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
         ],
         child: const CertificateVerifierApp(),
       ),
     );
-    await tester.pump();
-    expect(find.text('Xác Thực Văn Bằng Số'), findsOneWidget);
+    await tester.pumpAndSettle();
+
+    // Khi chưa đăng nhập phải thấy giao diện AuthScreen
+    expect(find.text('XÁC THỰC VĂN BẰNG'), findsOneWidget);
+    expect(find.text('ĐĂNG NHẬP'), findsOneWidget);
+    expect(find.text('Đăng ký ngay'), findsOneWidget);
   });
 }

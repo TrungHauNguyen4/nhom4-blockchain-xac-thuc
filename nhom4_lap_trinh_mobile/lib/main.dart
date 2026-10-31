@@ -1,16 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 
+import 'firebase_options.dart';
+import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
+import 'screens/auth/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/api_service.dart';
 
 void main() async {
-  // Đảm bảo các dịch vụ Flutter Core được khởi tạo trước khi chạy app
+  // 1. Đảm bảo các dịch vụ Flutter Core được khởi tạo trước khi chạy app
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Mở khóa xoay màn hình tự do dọc/ngang theo chuẩn Chương 9 (flutter_demo)
+  // 2. Khởi tạo Firebase theo chuẩn Chương 11 (flutter_demo)
+  try {
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+  } catch (e) {
+    debugPrint('[Main] Firebase Core chạy chế độ offline fallback: $e');
+  }
+
+  // 3. Mở khóa xoay màn hình tự do dọc/ngang theo chuẩn Chương 9 (flutter_demo)
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
@@ -18,16 +31,16 @@ void main() async {
     DeviceOrientation.landscapeRight,
   ]);
 
-  // Nạp cấu hình IP Backend & chế độ Mock đã lưu trong SharedPreferences
+  // 4. Nạp cấu hình IP Backend & chế độ Mock đã lưu trong SharedPreferences (Chương 12)
   await ApiService.loadSavedConfig();
 
   runApp(
-    // Quản lý State & Dependency Injection bằng MultiProvider chuẩn Chương 7
+    // 5. Quản lý State & Dependency Injection bằng MultiProvider chuẩn Chương 7
     MultiProvider(
       providers: [
         Provider<ApiService>(create: (_) => ApiService()),
         ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
-        // TV2 sẽ bổ sung ChangeNotifierProvider<AuthProvider> tại đây
+        ChangeNotifierProvider<AuthProvider>(create: (_) => AuthProvider()),
       ],
       child: const CertificateVerifierApp(),
     ),
@@ -47,10 +60,48 @@ class CertificateVerifierApp extends StatelessWidget {
           theme: ThemeProvider.lightTheme,
           darkTheme: ThemeProvider.darkTheme,
           themeMode: themeProvider.themeMode,
-          // TV2 sẽ bọc StreamBuilder<User?> (FirebaseAuth.authStateChanges) tại home
-          home: const HomeScreen(),
+          // Cổng kiểm tra phiên đăng nhập tự động (AuthGate) theo chuẩn Chương 11
+          home: const AuthGate(),
         );
       },
     );
+  }
+}
+
+/// Cổng kiểm tra trạng thái đăng nhập tự động (AuthGate)
+/// Điều hướng vào HomeScreen nếu đã đăng nhập, ngược lại hiển thị AuthScreen
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final authProvider = context.watch<AuthProvider>();
+
+    // Nếu đang nạp phiên đăng nhập từ máy
+    if (authProvider.isLoading && authProvider.currentUser == null) {
+      return const Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Đang kiểm tra phiên đăng nhập...',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Nếu đã xác thực -> Vào màn hình chính HomeScreen
+    if (authProvider.isAuthenticated) {
+      return const HomeScreen();
+    }
+
+    // Nếu chưa đăng nhập -> Hiển thị màn hình Đăng nhập AuthScreen
+    return const AuthScreen();
   }
 }
