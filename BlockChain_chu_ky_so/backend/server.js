@@ -282,7 +282,8 @@ app.get('/api/v1/verify/:hash', async (req, res) => {
                 studentCode: dbRecord?.StudentCode || null,
                 degreeName: dbRecord?.DegreeName || null,
                 issuerName: dbRecord?.IssuerName || 'Phòng Đào Tạo',
-                createdByEmail: dbRecord?.CreatedByEmail || null
+                createdByEmail: dbRecord?.CreatedByEmail || null,
+                previewUrl: dbRecord?.PreviewUrl || null
             }
         });
     } catch (error) {
@@ -311,11 +312,15 @@ app.get('/api/v1/certificates', async (req, res) => {
                 transactionHash: item.TxHash,
                 blockNumber: item.BlockNumber,
                 signer: item.Signer,
+                timestamp: item.CreatedAt
+                    ? Math.floor(new Date(item.CreatedAt).getTime() / 1000)
+                    : Math.floor(Date.now() / 1000),
                 studentName: item.StudentName,
                 studentCode: item.StudentCode,
                 degreeName: item.DegreeName,
                 issuerName: item.IssuerName,
                 createdByEmail: item.CreatedByEmail,
+                previewUrl: item.PreviewUrl || null,
                 createdAt: item.CreatedAt
             }))
         });

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
@@ -7,9 +8,14 @@ import '../services/api_service.dart';
 import '../services/hash_service.dart';
 import '../services/db_service.dart';
 import '../models/certificate_record.dart';
-import '../providers/theme_provider.dart';
+import '../models/user_model.dart';
+import '../providers/auth_provider.dart';
+import '../widgets/progress_stream_card.dart';
 import 'qr_scanner_screen.dart';
 import 'verify_detail_screen.dart';
+import 'issuer/issue_certificate_screen.dart';
+import 'settings/settings_tab.dart';
+import 'auth/profile_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -20,7 +26,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
-  final ApiService _apiService = ApiService();
+  HashAlgorithm _selectedAlgorithm = HashAlgorithm.keccak256;
 
   // Controller nhập Hash thủ công
   final TextEditingController _hashInputController = TextEditingController();
@@ -40,11 +46,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _loadOfflineVault() async {
     setState(() => _isLoadingVault = true);
-    final list = await DatabaseService.instance.getAllCertificates();
-    setState(() {
-      _offlineVault = list;
-      _isLoadingVault = false;
-    });
+    try {
+      final list = await DatabaseService.instance.getAllCertificates();
+      if (!mounted) return;
+      setState(() {
+        _offlineVault = list;
+        _isLoadingVault = false;
+      });
+    } catch (e) {
+      debugPrint('[HomeScreen] Bỏ qua đọc Sqflite trên môi trường không hỗ trợ: $e');
+      if (!mounted) return;
+      setState(() => _isLoadingVault = false);
+    }
   }
 
   // Thao tác 1: Chọn file PDF/Ảnh từ máy -> Băm Keccak256 trên RAM -> Verify
@@ -69,15 +82,19 @@ class _HomeScreenState extends State<HomeScreen> {
           return;
         }
 
+        if (!mounted) return;
+        final apiService = context.read<ApiService>();
         setState(() {
           _verificationStream = HashService.verifyFileStream(
             fileBytes: bytes,
             fileName: file.name,
-            apiService: _apiService,
+            apiService: apiService,
+            algorithm: _selectedAlgorithm,
           );
         });
       }
     } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Lỗi chọn file: $e')),
       );
@@ -86,42 +103,95 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // Thao tác 2: Mở Camera quét mã QR
   Future<void> _scanQrCode() async {
-    final scannedCode = await Navigator.push<String>(
+    final scannedHash = await Navigator.push<String>(
       context,
       MaterialPageRoute(builder: (context) => const QrScannerScreen()),
     );
 
-    if (!mounted) return;
-    if (scannedCode != null && scannedCode.isNotEmpty) {
-      _hashInputController.text = scannedCode;
-      _startVerifyHash(scannedCode, fileName: 'Văn bằng quét QR');
+    if (scannedHash != null && scannedHash.isNotEmpty) {
+      _hashInputController.text = scannedHash;
+      _startVerifyHash(scannedHash);
     }
   }
 
-  // Thao tác 3: Xác minh bằng mã Hash
-  void _startVerifyHash(String hash, {String fileName = 'Văn bằng tra cứu'}) {
+  // Thao tác 3: Bắt đầu xác minh Hash bằng StreamBuilder
+  void _startVerifyHash(String hash) {
     final clean = hash.trim();
     if (clean.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập mã Hash')),
+        const SnackBar(content: Text('Vui lòng nhập mã băm Keccak-256 (0x...)')),
       );
       return;
     }
 
+    final apiService = context.read<ApiService>();
     setState(() {
       _verificationStream = HashService.verifyHashStream(
         dataHash: clean,
-        apiService: _apiService,
-        fileName: fileName,
+        apiService: apiService,
       );
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final authProvider = context.watch<AuthProvider>();
+    final user = authProvider.currentUser;
+    final isStaff = user?.isStaff ?? false;
+
+    // Danh sách tab linh hoạt theo vai trò người dùng (Staff có thêm Tab Ký số)
+    final List<Widget> pages = [
+      _buildVerifyTab(),
+      _buildVaultTab(),
+      if (isStaff) const IssueCertificateScreen(),
+      const SettingsTab(),
+    ];
+
+    final List<NavigationDestination> destinations = [
+      const NavigationDestination(
+        icon: Icon(Icons.verified_outlined),
+        selectedIcon: Icon(Icons.verified),
+        label: 'Xác thực',
+      ),
+      const NavigationDestination(
+        icon: Icon(Icons.folder_special_outlined),
+        selectedIcon: Icon(Icons.folder_special),
+        label: 'Sổ tay Offline',
+      ),
+      if (isStaff)
+        const NavigationDestination(
+          icon: Icon(Icons.rate_review_outlined),
+          selectedIcon: Icon(Icons.rate_review),
+          label: 'Cấp bằng',
+        ),
+      const NavigationDestination(
+        icon: Icon(Icons.settings_outlined),
+        selectedIcon: Icon(Icons.settings),
+        label: 'Cài đặt',
+      ),
+    ];
+
+    if (_currentTabIndex >= pages.length) {
+      _currentTabIndex = 0;
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(_getTitleForTab(_currentTabIndex)),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _getTitleForTab(_currentTabIndex, isStaff),
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            ),
+            if (user != null)
+              Text(
+                '${user.name} • ${user.roleTitle}',
+                style: const TextStyle(fontSize: 11, color: Colors.white70),
+              ),
+          ],
+        ),
         actions: [
           if (_currentTabIndex == 1)
             IconButton(
@@ -129,15 +199,30 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: 'Làm mới sổ tay',
               onPressed: _loadOfflineVault,
             ),
+          // Nút Avatar mở Hồ sơ người dùng
+          IconButton(
+            tooltip: 'Hồ sơ người dùng',
+            icon: CircleAvatar(
+              radius: 16,
+              backgroundColor: Colors.white24,
+              backgroundImage: _getAvatarImage(user?.avatarBase64OrUrl),
+              child: user?.avatarBase64OrUrl == null
+                  ? const Icon(Icons.person, size: 18, color: Colors.white)
+                  : null,
+            ),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ProfileScreen()),
+              );
+            },
+          ),
+          const SizedBox(width: 4),
         ],
       ),
       body: IndexedStack(
         index: _currentTabIndex,
-        children: [
-          _buildVerifyTab(),
-          _buildVaultTab(),
-          _buildSettingsTab(),
-        ],
+        children: pages,
       ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _currentTabIndex,
@@ -145,37 +230,49 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _currentTabIndex = index);
           if (index == 1) _loadOfflineVault();
         },
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.verified_outlined),
-            selectedIcon: Icon(Icons.verified),
-            label: 'Xác thực',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_special_outlined),
-            selectedIcon: Icon(Icons.folder_special),
-            label: 'Sổ tay Offline',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Cài đặt',
-          ),
-        ],
+        destinations: destinations,
       ),
     );
   }
 
-  String _getTitleForTab(int index) {
-    switch (index) {
-      case 0:
-        return 'Xác Thực Văn Bằng Số';
-      case 1:
-        return 'Sổ Tay Văn Bằng (Offline)';
-      case 2:
-        return 'Cài Đặt & Kết Nối';
-      default:
-        return 'Xác Thực Văn Bằng';
+  ImageProvider? _getAvatarImage(String? avatar) {
+    if (avatar == null || avatar.isEmpty) return null;
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
+      return NetworkImage(avatar);
+    }
+    try {
+      final bytes = base64Decode(avatar);
+      return MemoryImage(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _getTitleForTab(int index, bool isStaff) {
+    if (isStaff) {
+      switch (index) {
+        case 0:
+          return 'Xác Thực Văn Bằng Số';
+        case 1:
+          return 'Sổ Tay Văn Bằng (Offline)';
+        case 2:
+          return 'Ký Số & Cấp Phát Bằng';
+        case 3:
+          return 'Cài Đặt & Kết Nối';
+        default:
+          return 'Xác Thực Văn Bằng';
+      }
+    } else {
+      switch (index) {
+        case 0:
+          return 'Xác Thực Văn Bằng Số';
+        case 1:
+          return 'Sổ Tay Văn Bằng (Offline)';
+        case 2:
+          return 'Cài Đặt & Kết Nối';
+        default:
+          return 'Xác Thực Văn Bằng';
+      }
     }
   }
 
@@ -205,41 +302,85 @@ class _HomeScreenState extends State<HomeScreen> {
               children: [
                 Text(
                   'Kiểm Định Bằng Cấp Blockchain',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
                 ),
                 SizedBox(height: 6),
                 Text(
-                  'Băm dữ liệu an toàn trên RAM máy khách & Đối soát sổ cái Ethereum Sepolia',
+                  'Mọi dữ liệu văn bằng được đối soát trực tiếp với Smart Contract trên mạng Ethereum Sepolia và SQL Server.',
                   style: TextStyle(color: Colors.white70, fontSize: 13),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-          // Hai nút thao tác chính: Camera QR và Tải File
+          // Tùy chọn thuật toán băm trên RAM
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              child: Row(
+                children: [
+                  const Icon(Icons.memory, size: 20),
+                  const SizedBox(width: 8),
+                  const Text('Thuật toán băm RAM: ',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                  const Spacer(),
+                  DropdownButton<HashAlgorithm>(
+                    value: _selectedAlgorithm,
+                    underline: const SizedBox(),
+                    items: const [
+                      DropdownMenuItem(
+                        value: HashAlgorithm.keccak256,
+                        child: Text('Keccak-256 (Mặc định)',
+                            style: TextStyle(fontSize: 13)),
+                      ),
+                      DropdownMenuItem(
+                        value: HashAlgorithm.sha256,
+                        child:
+                            Text('SHA-256', style: TextStyle(fontSize: 13)),
+                      ),
+                    ],
+                    onChanged: (val) {
+                      if (val != null) {
+                        setState(() => _selectedAlgorithm = val);
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 2 nút hành động: Quét QR & Chọn File
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.qr_code_scanner, size: 24),
-                  label: const Text('Quét mã QR'),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
+                  icon: const Icon(Icons.qr_code_scanner),
+                  label: const Text('Quét Mã QR'),
                   onPressed: _scanQrCode,
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: ElevatedButton.icon(
-                  icon: const Icon(Icons.upload_file, size: 24),
-                  label: const Text('Chọn File Bằng'),
                   style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12)),
                   ),
+                  icon: const Icon(Icons.upload_file),
+                  label: const Text('Chọn File/Ảnh'),
                   onPressed: _pickAndVerifyFile,
                 ),
               ),
@@ -247,15 +388,17 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const SizedBox(height: 20),
 
-          // Ô nhập mã Hash thủ công
+          // Nhập mã Hash thủ công
           Card(
             child: Padding(
-              padding: const EdgeInsets.all(12.0),
+              padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Hoặc nhập mã Data Hash (bytes32):',
-                      style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                  const Text(
+                    'Tra cứu trực tiếp bằng mã băm Hash:',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
                   const SizedBox(height: 8),
                   TextField(
                     controller: _hashInputController,
@@ -275,140 +418,26 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 20),
 
           // TIÊU CHÍ BẮT BUỘC: Xử lý thời gian thực bằng StreamBuilder (async*/yield)
-          if (_verificationStream != null) _buildStreamBuilderCard(),
-        ],
-      ),
-    );
-  }
-
-  // Khối hiển thị tiến trình xác thực Realtime bằng StreamBuilder
-  Widget _buildStreamBuilderCard() {
-    return StreamBuilder<VerificationProgress>(
-      stream: _verificationStream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Card(
-            child: Padding(
-              padding: EdgeInsets.all(20.0),
-              child: Center(child: CircularProgressIndicator()),
-            ),
-          );
-        }
-
-        final data = snapshot.data!;
-        final bool isDone = data.progress >= 1.0;
-        final bool isValid = data.step == VerificationStep.verifiedValid;
-
-        return Card(
-          color: isDone
-              ? (isValid ? Colors.green.withOpacity(0.08) : Colors.red.withOpacity(0.08))
-              : null,
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Tiến trình thẩm định:',
-                      style: TextStyle(fontWeight: FontWeight.bold, color: Theme.of(context).colorScheme.primary),
-                    ),
-                    Text('${(data.progress * 100).toInt()}%',
-                        style: const TextStyle(fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                LinearProgressIndicator(
-                  value: data.progress,
-                  backgroundColor: Colors.grey.shade300,
-                  color: isDone
-                      ? (isValid ? Colors.green : Colors.red)
-                      : Theme.of(context).colorScheme.primary,
-                  minHeight: 8,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    if (!isDone)
-                      const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    else
-                      Icon(
-                        isValid ? Icons.check_circle : Icons.error,
-                        color: isValid ? Colors.green : Colors.red,
-                        size: 20,
-                      ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            data.statusMessage,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
-                              color: isDone ? (isValid ? Colors.green.shade800 : Colors.red.shade800) : null,
-                            ),
-                          ),
-                          if (data.errorMessage != null) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Chi tiết: ${data.errorMessage}',
-                              style: const TextStyle(fontSize: 11, color: Colors.redAccent),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                if (data.hash != null) ...[
-                  const SizedBox(height: 10),
-                  Text('Mã Hash: ${data.hash}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.grey)),
-                ],
-                if (isDone) ...[
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.arrow_forward),
-                      label: const Text('Xem Chi Tiết Chứng Nhận'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isValid ? Colors.green : Colors.red,
-                        foregroundColor: Colors.white,
-                      ),
-                      onPressed: () {
-                        final targetHash = (data.hash != null && data.hash!.isNotEmpty)
-                            ? data.hash!
-                            : _hashInputController.text;
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => VerifyDetailScreen(
-                              record: data.record,
-                              searchedHash: targetHash.isEmpty ? 'Chưa xác định' : targetHash,
-                            ),
-                          ),
-                        ).then((_) => _loadOfflineVault());
-                      },
+          if (_verificationStream != null)
+            ProgressStreamCard.verification(
+              stream: _verificationStream!,
+              onViewVerificationDetail: (data) {
+                final targetHash = (data.hash != null && data.hash!.isNotEmpty)
+                    ? data.hash!
+                    : _hashInputController.text;
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => VerifyDetailScreen(
+                      record: data.record,
+                      searchedHash: targetHash.isEmpty ? 'Chưa xác định' : targetHash,
                     ),
                   ),
-                ],
-              ],
+                ).then((_) => _loadOfflineVault());
+              },
             ),
-          ),
-        );
-      },
+        ],
+      ),
     );
   }
 
@@ -505,108 +534,5 @@ class _HomeScreenState extends State<HomeScreen> {
       await DatabaseService.instance.deleteCertificate(item.id!);
       _loadOfflineVault();
     }
-  }
-
-  // ==========================================
-  // TAB 3: CÀI ĐẶT & KẾT NỐI (DARK MODE & IP)
-  // ==========================================
-  Widget _buildSettingsTab() {
-    final themeProvider = Provider.of<ThemeProvider>(context);
-    final ipController = TextEditingController(text: ApiService.baseUrl);
-
-    return ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Cài đặt Dark Mode
-        Card(
-          child: SwitchListTile(
-            secondary: Icon(
-              themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            title: const Text('Chế độ Tối (Dark Theme)', style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('Bảo vệ mắt và tiết kiệm pin'),
-            value: themeProvider.isDarkMode,
-            onChanged: (val) => themeProvider.toggleTheme(val),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Cài đặt địa chỉ Server Backend
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Địa chỉ External REST API (Backend):',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: ipController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    hintText: 'http://10.0.2.2:3000',
-                    helperText: 'Android Emulator: 10.0.2.2:3000 | Cáp USB/ADB: localhost:3000',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    ElevatedButton(
-                      child: const Text('Lưu Địa Chỉ'),
-                      onPressed: () {
-                        ApiService.updateBaseUrl(ipController.text);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text('Đã cập nhật máy chủ: ${ApiService.baseUrl}')),
-                        );
-                      },
-                    ),
-                    const SizedBox(width: 10),
-                    OutlinedButton(
-                      child: const Text('Thử Kết Nối'),
-                      onPressed: () async {
-                        final ok = await _apiService.checkServerHealth();
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              backgroundColor: ok ? Colors.green : Colors.red,
-                              content: Text(ok
-                                  ? '✅ Kết nối Backend Node.js thành công!'
-                                  : '❌ Không thể kết nối tới Backend tại ${ApiService.baseUrl}'),
-                            ),
-                          );
-                        }
-                      },
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 16),
-
-        // Giới thiệu đề tài
-        const Card(
-          child: Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Thông Tin Đề Tài', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-                SizedBox(height: 8),
-                Text('• Đề tài: Ứng dụng Xác thực Văn bằng Chứng chỉ số Blockchain'),
-                Text('• Nền tảng: Flutter & Dart'),
-                Text('• Lưu trữ Cục bộ: Sqflite'),
-                Text('• Xử lý Realtime: StreamBuilder (async*/yield)'),
-                Text('• Mạng lưới Blockchain: Ethereum Sepolia Testnet'),
-                Text('• Kiến trúc: BaaS Client-Server (REST API ngoài)'),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
   }
 }
