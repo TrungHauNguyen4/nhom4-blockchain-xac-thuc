@@ -1,4 +1,5 @@
 import 'dart:typed_data';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -7,6 +8,7 @@ import 'package:nhom4_lap_trinh_mobile/main.dart';
 import 'package:nhom4_lap_trinh_mobile/models/user_model.dart';
 import 'package:nhom4_lap_trinh_mobile/providers/auth_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/providers/theme_provider.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/issuer/issue_certificate_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/hash_service.dart';
 
@@ -118,5 +120,35 @@ void main() {
     expect(find.text('XÁC THỰC VĂN BẰNG'), findsOneWidget);
     expect(find.text('ĐĂNG NHẬP'), findsOneWidget);
     expect(find.text('Đăng ký ngay'), findsOneWidget);
+  });
+
+  testWidgets('Màn hình IssueCertificateScreen kiểm tra phân quyền Staff, menu Camera/Thư viện và OrientationBuilder', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final authProvider = AuthProvider();
+    await authProvider.login('canbo@edu.vn', '123456');
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiService>(create: (_) => ApiService()),
+          ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ],
+        child: const MaterialApp(
+          home: IssueCertificateScreen(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Kiểm tra hiển thị đầy đủ các bước cho Cán bộ đào tạo
+    expect(find.text('Bước 1: Chọn Tài Liệu / Ảnh Cần Ký Số'), findsOneWidget);
+    expect(find.text('Bước 2: Thông Tin Sinh Viên & Bằng Cấp'), findsOneWidget);
+
+    // Bấm nút Chụp / Chọn Ảnh phải mở BottomSheet có cả Camera và Thư viện
+    await tester.tap(find.text('Chụp / Chọn Ảnh'));
+    await tester.pumpAndSettle();
+    expect(find.text('Chụp ảnh bằng cấp trực tiếp từ Camera'), findsOneWidget);
+    expect(find.text('Chọn ảnh bằng cấp từ Thư viện máy'), findsOneWidget);
   });
 }

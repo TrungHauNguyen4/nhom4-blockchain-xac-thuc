@@ -76,7 +76,7 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    item.issuerName ?? 'Đơn vị đào tạo',
+                    item.issuerName.isNotEmpty ? item.issuerName : 'Đơn vị đào tạo',
                     style: TextStyle(color: Colors.grey.shade600),
                   ),
                   const SizedBox(height: 16),
@@ -245,40 +245,31 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                     );
                   }
 
-                  // Trạng thái 4: Hiển thị danh sách
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    itemCount: list.length,
-                    itemBuilder: (context, index) {
-                      final item = list[index];
-                      return Card(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        elevation: 2,
-                        child: ListTile(
-                          leading: CircleAvatar(
-                            backgroundColor: const Color(0xFF673AB7).withValues(alpha: 0.15),
-                            child: const Icon(Icons.verified, color: Color(0xFF673AB7)),
+                  // Trạng thái 4: Hiển thị danh sách 1 cột (dọc) hoặc 2 cột (ngang) bằng OrientationBuilder
+                  return OrientationBuilder(
+                    builder: (context, orientation) {
+                      final isLandscape = orientation == Orientation.landscape;
+
+                      if (isLandscape) {
+                        return GridView.builder(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 2,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 3.1,
                           ),
-                          title: Text(
-                            item.studentName ?? item.fileName,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          subtitle: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              if (item.degreeName != null)
-                                Text(
-                                  item.degreeName!,
-                                  style: const TextStyle(fontSize: 13, color: Colors.blueAccent),
-                                ),
-                              Text(
-                                'MSSV: ${item.studentCode ?? 'N/A'} • Ngày: ${item.formattedBlockchainDate}',
-                                style: const TextStyle(fontSize: 11),
-                              ),
-                            ],
-                          ),
-                          trailing: const Icon(Icons.qr_code_2, size: 28),
-                          onTap: () => _showCertificateDetailModal(item),
+                          itemCount: list.length,
+                          itemBuilder: (context, index) => _buildIssuedItemCard(list[index]),
+                        );
+                      }
+
+                      return ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        itemCount: list.length,
+                        itemBuilder: (context, index) => Padding(
+                          padding: const EdgeInsets.only(bottom: 10),
+                          child: _buildIssuedItemCard(list[index]),
                         ),
                       );
                     },
@@ -288,6 +279,48 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildIssuedItemCard(CertificateRecord item) {
+    return Card(
+      margin: EdgeInsets.zero,
+      elevation: 2,
+      child: ListTile(
+        leading: CircleAvatar(
+          backgroundColor: const Color(0xFF673AB7).withValues(alpha: 0.15),
+          child: const Icon(Icons.verified, color: Color(0xFF673AB7)),
+        ),
+        title: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            item.studentName ?? item.fileName,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (item.degreeName != null)
+              Text(
+                item.degreeName!,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 13, color: Colors.blueAccent),
+              ),
+            Text(
+              'MSSV: ${item.studentCode ?? 'N/A'} • Ngày: ${item.formattedBlockchainDate}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11),
+            ),
+          ],
+        ),
+        trailing: const Icon(Icons.qr_code_2, size: 28),
+        onTap: () => _showCertificateDetailModal(item),
       ),
     );
   }

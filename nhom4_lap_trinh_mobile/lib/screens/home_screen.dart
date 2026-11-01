@@ -8,7 +8,6 @@ import '../services/api_service.dart';
 import '../services/hash_service.dart';
 import '../services/db_service.dart';
 import '../models/certificate_record.dart';
-import '../models/user_model.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/progress_stream_card.dart';
 import 'qr_scanner_screen.dart';
@@ -135,7 +134,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final authProvider = context.watch<AuthProvider>();
     final user = authProvider.currentUser;
     final isStaff = user?.isStaff ?? false;
