@@ -4,9 +4,10 @@ import '../models/certificate_record.dart';
 import '../models/scan_history_model.dart';
 
 class DatabaseService {
-  // Cấu trúc Singleton chuẩn phong cách môn học (flutter_demo)
-  static final DatabaseService instance = DatabaseService._init();
-  factory DatabaseService() => instance;
+  // Cấu trúc Singleton chuẩn phong cách môn học (flutter_demo Chương 11)
+  static final DatabaseService _databaseService = DatabaseService._init();
+  static DatabaseService get instance => _databaseService;
+  factory DatabaseService() => _databaseService;
   DatabaseService._init();
 
   static Database? _database;
@@ -120,7 +121,7 @@ class DatabaseService {
     return result.map((json) => CertificateRecord.fromMap(json)).toList();
   }
 
-  // Tìm kiếm văn bằng offline theo từ khóa (dùng LIKE chuẩn flutter_demo)
+  // [READ] Tìm kiếm văn bằng offline theo từ khóa (dùng LIKE chuẩn flutter_demo)
   Future<List<CertificateRecord>> searchCertificates(String keyword) async {
     final db = await instance.database;
     final clean = keyword.trim();
@@ -128,11 +129,44 @@ class DatabaseService {
 
     final result = await db.query(
       'certificates',
-      where: 'fileName LIKE ? OR studentName LIKE ? OR studentCode LIKE ? OR degreeName LIKE ? OR dataHash LIKE ?',
-      whereArgs: ['%$clean%', '%$clean%', '%$clean%', '%$clean%', '%$clean%'],
+      where:
+          'fileName LIKE ? OR studentName LIKE ? OR studentCode LIKE ? OR degreeName LIKE ? OR issuerName LIKE ? OR dataHash LIKE ?',
+      whereArgs: [
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+      ],
       orderBy: 'id DESC',
     );
     return result.map((json) => CertificateRecord.fromMap(json)).toList();
+  }
+
+  // [READ] Lấy 1 văn bằng đã lưu trong Sổ tay theo mã Hash
+  Future<CertificateRecord?> getCertificateByHash(String dataHash) async {
+    final db = await instance.database;
+    final result = await db.query(
+      'certificates',
+      where: 'dataHash = ?',
+      whereArgs: [dataHash.trim()],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return CertificateRecord.fromMap(result.first);
+    }
+    return null;
+  }
+
+  // [DELETE] Xóa văn bằng theo mã Hash
+  Future<int> deleteCertificateByHash(String dataHash) async {
+    final db = await instance.database;
+    return await db.delete(
+      'certificates',
+      where: 'dataHash = ?',
+      whereArgs: [dataHash.trim()],
+    );
   }
 
   // Kiểm tra xem chứng chỉ đã được lưu trong máy chưa
@@ -166,10 +200,34 @@ class DatabaseService {
     return await db.insert('scan_history', history.toMap());
   }
 
-  // Lấy toàn bộ lịch sử tra cứu gần nhất
+  // [READ] Lấy toàn bộ lịch sử tra cứu gần nhất
   Future<List<ScanHistoryModel>> getAllScanHistory() async {
     final db = await instance.database;
     final result = await db.query('scan_history', orderBy: 'id DESC', limit: 100);
+    return result.map((json) => ScanHistoryModel.fromMap(json)).toList();
+  }
+
+  // [READ] Tìm kiếm lịch sử tra cứu offline theo từ khóa (dùng LIKE)
+  Future<List<ScanHistoryModel>> searchScanHistory(String keyword) async {
+    final db = await instance.database;
+    final clean = keyword.trim();
+    if (clean.isEmpty) return getAllScanHistory();
+
+    final result = await db.query(
+      'scan_history',
+      where:
+          'fileName LIKE ? OR studentName LIKE ? OR degreeName LIKE ? OR issuerName LIKE ? OR dataHash LIKE ? OR scanMethod LIKE ?',
+      whereArgs: [
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+      ],
+      orderBy: 'id DESC',
+      limit: 100,
+    );
     return result.map((json) => ScanHistoryModel.fromMap(json)).toList();
   }
 
