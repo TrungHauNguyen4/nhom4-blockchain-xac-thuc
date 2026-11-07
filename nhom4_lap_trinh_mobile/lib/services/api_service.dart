@@ -3,10 +3,26 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/certificate_record.dart';
+import 'db_service.dart';
 
 class ApiService {
   static const String _prefBaseUrlKey = 'server_base_url';
   static const String _prefMockModeKey = 'use_mock_when_offline';
+
+  // Địa chỉ Smart Contract công khai trên mạng lưới Ethereum Sepolia (SignedRecordRegistry.sol)
+  // Chỉ dùng cho lệnh đọc công khai eth_call (view), hoàn toàn không chứa bất kỳ khóa bí mật nào!
+  static const String sepoliaContractAddress =
+      '0xC54ad469C7eBE3a7C84b728335247C6fBDaE1bB8';
+
+  // Selector 4-byte của hàm getRecord(bytes32): keccak256("getRecord(bytes32)")[0..4] = 0x213681cd
+  static const String _getRecordSelector = '0x213681cd';
+
+  // Danh sách các cổng RPC Ethereum Sepolia công khai miễn phí dự phòng lẫn nhau khi Laptop tắt nguồn
+  static const List<String> publicSepoliaRpcUrls = [
+    'https://ethereum-sepolia-rpc.publicnode.com',
+    'https://1rpc.io/sepolia',
+    'https://rpc.sepolia.org',
+  ];
 
   // Tự động nhận diện: Nếu chạy trên Web/Desktop thì dùng localhost:3000, nếu trên Android Emulator thì dùng 10.0.2.2:3000
   static String get defaultBaseUrl =>
@@ -103,9 +119,20 @@ class ApiService {
       );
     }
 
+    // Chuẩn hóa định dạng 0x + 64 ký tự hex (bytes32)
+    final normalizedHash =
+        (!cleanHash.startsWith('0x') && cleanHash.length == 64)
+            ? '0x$cleanHash'
+            : cleanHash;
+    final hexRegex = RegExp(r'^0x[0-9a-fA-F]{64}$');
+    if (!hexRegex.hasMatch(normalizedHash)) {
+      return null;
+    }
+
+    // TẦNG 1: Ưu tiên gọi Backend Node.js + SQL Server (lấy đầy đủ Metadata sinh viên)
     try {
-      final url = Uri.parse('$baseUrl/api/v1/verify/$cleanHash');
-      final response = await http.get(url).timeout(const Duration(seconds: 15));
+      final url = Uri.parse('$baseUrl/api/v1/verify/$normalizedHash');
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> body = jsonDecode(response.body);
@@ -116,15 +143,128 @@ class ApiService {
           );
         }
       } else if (response.statusCode == 404) {
-        // Mã hash chưa từng được lưu trữ trên Blockchain
+        // Máy chủ đang bật và xác nhận mã hash chưa từng được lưu trữ trên Blockchain
         return null;
-      } else {
-        throw Exception('Máy chủ phản hồi lỗi: ${response.statusCode}');
       }
     } catch (e) {
-      rethrow;
+      debugPrint(
+        '[ApiService] Laptop Backend không phản hồi ($e) -> Tự động chuyển sang TẦNG 2: Đọc trực tiếp Smart Contract Ethereum Sepolia!',
+      );
     }
-    return null;
+
+    // TẦNG 2: Laptop tắt hoàn toàn -> Điện thoại tự động gọi thẳng lên Smart Contract Ethereum Sepolia công khai!
+    return await verifyOnChainSepoliaDirect(
+      normalizedHash,
+      fileName: fileName,
+    );
+  }
+
+  // ========================================================
+  // ĐỌC TRỰC TIẾP SMART CONTRACT ETHEREUM SEPOLIA (KHÔNG CẦN BACKEND LAPTOP)
+  // Sử dụng chuẩn JSON-RPC eth_call tới hàm view getRecord(bytes32)
+  // ========================================================
+  static CertificateRecord? decodeOnChainGetRecordResult(
+    String rawHex, {
+    required String fallbackHash,
+    String fileName = 'Văn bằng xác thực On-Chain',
+    CertificateRecord? cachedLocal,
+  }) {
+    final clean = rawHex.trim();
+    // Tuple tĩnh (bytes32 dataHash, address signer, uint256 timestamp) = 3 * 64 + 2 ('0x') = 194 ký tự
+    if (!clean.startsWith('0x') || clean.length < 194) {
+      return null;
+    }
+
+    final returnedHash = '0x${clean.substring(2, 66)}';
+    final signerHex = '0x${clean.substring(90, 130)}';
+    final timestampBig = BigInt.tryParse(clean.substring(130, 194), radix: 16);
+    final timestamp = timestampBig?.toInt() ?? 0;
+
+    final isZeroSigner =
+        signerHex.toLowerCase() == '0x0000000000000000000000000000000000000000';
+    if (timestamp <= 0 || isZeroSigner) {
+      return null;
+    }
+
+    final resolvedHash =
+        returnedHash == '0x0000000000000000000000000000000000000000000000000000000000000000'
+            ? fallbackHash
+            : returnedHash;
+
+    return CertificateRecord(
+      id: cachedLocal?.id,
+      dataHash: resolvedHash,
+      signer: signerHex,
+      timestamp: timestamp,
+      fileName: cachedLocal?.fileName ?? fileName,
+      fileType: cachedLocal?.fileType ??
+          (fileName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'DOCUMENT'),
+      txHash: cachedLocal?.txHash,
+      blockNumber: cachedLocal?.blockNumber,
+      studentName: cachedLocal?.studentName,
+      studentCode: cachedLocal?.studentCode,
+      degreeName: cachedLocal?.degreeName,
+      issuerName: cachedLocal?.issuerName ??
+          'Xác thực trực tiếp On-Chain (Ethereum Sepolia)',
+    );
+  }
+
+  Future<CertificateRecord?> verifyOnChainSepoliaDirect(
+    String normalizedHash, {
+    String fileName = 'Văn bằng kiểm tra',
+  }) async {
+    final calldata =
+        '$_getRecordSelector${normalizedHash.substring(2).toLowerCase()}';
+    final payload = jsonEncode({
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': 'eth_call',
+      'params': [
+        {
+          'to': sepoliaContractAddress,
+          'data': calldata,
+        },
+        'latest',
+      ],
+    });
+
+    CertificateRecord? cachedLocal;
+    try {
+      cachedLocal =
+          await DatabaseService.instance.getCertificateByHash(normalizedHash);
+    } catch (_) {}
+
+    Object? lastError;
+    for (final rpcUrl in publicSepoliaRpcUrls) {
+      try {
+        final response = await http
+            .post(
+              Uri.parse(rpcUrl),
+              headers: const {'Content-Type': 'application/json'},
+              body: payload,
+            )
+            .timeout(const Duration(seconds: 7));
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> body = jsonDecode(response.body);
+          if (body.containsKey('result') && body['result'] is String) {
+            return decodeOnChainGetRecordResult(
+              body['result'] as String,
+              fallbackHash: normalizedHash,
+              fileName: fileName,
+              cachedLocal: cachedLocal,
+            );
+          }
+        }
+      } catch (e) {
+        lastError = e;
+        debugPrint('[ApiService] RPC $rpcUrl lỗi: $e');
+      }
+    }
+
+    throw Exception(
+      'Không có kết nối Internet để truy vấn Ethereum Sepolia (${lastError ?? "Offline"})',
+    );
   }
 
   // ========================================================
@@ -284,7 +424,7 @@ class ApiService {
           : '';
       final url = Uri.parse('$baseUrl/api/v1/certificates$queryParam');
 
-      final response = await http.get(url).timeout(const Duration(seconds: 15));
+      final response = await http.get(url).timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> body = jsonDecode(response.body);
@@ -299,22 +439,49 @@ class ApiService {
         }
       }
     } catch (e) {
-      debugPrint('[ApiService] Lỗi lấy danh sách văn bằng: $e');
+      debugPrint(
+        '[ApiService] Không kết nối được SQL Server ($e) -> Đọc danh sách dự phòng từ Sổ tay Sqflite!',
+      );
+      try {
+        return await DatabaseService.instance.searchCertificates(keyword);
+      } catch (_) {}
     }
     return [];
   }
 
   // ========================================================
-  // API 4: Kiểm tra kết nối tới Server Backend (/health)
+  // API 4: Kiểm tra kết nối tới Server Backend (/health) & Sepolia On-Chain RPC
   // ========================================================
   Future<bool> checkServerHealth() async {
     if (useMockWhenOffline) return true;
     try {
       final url = Uri.parse('$baseUrl/health');
-      final res = await http.get(url).timeout(const Duration(seconds: 4));
+      final res = await http.get(url).timeout(const Duration(seconds: 3));
       return res.statusCode == 200;
     } catch (_) {
       return false;
     }
+  }
+
+  Future<bool> checkSepoliaRpcHealth() async {
+    final payload = jsonEncode({
+      'jsonrpc': '2.0',
+      'id': 1,
+      'method': 'eth_chainId',
+      'params': [],
+    });
+    for (final rpcUrl in publicSepoliaRpcUrls) {
+      try {
+        final res = await http
+            .post(
+              Uri.parse(rpcUrl),
+              headers: const {'Content-Type': 'application/json'},
+              body: payload,
+            )
+            .timeout(const Duration(seconds: 5));
+        if (res.statusCode == 200) return true;
+      } catch (_) {}
+    }
+    return false;
   }
 }

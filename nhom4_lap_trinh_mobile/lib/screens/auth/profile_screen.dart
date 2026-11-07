@@ -200,7 +200,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       radius: 54,
                       backgroundColor: theme.colorScheme.primaryContainer,
                       backgroundImage: _getAvatarImage(user.avatarBase64OrUrl),
-                      child: user.avatarBase64OrUrl == null
+                      onBackgroundImageError:
+                          _getAvatarImage(user.avatarBase64OrUrl) != null
+                              ? (_, _) {}
+                              : null,
+                      child: _getAvatarImage(user.avatarBase64OrUrl) == null
                           ? Icon(
                               Icons.person,
                               size: 58,
@@ -227,6 +231,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 12),
                 Text(
                   user.name,
+                  textAlign: TextAlign.center,
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -234,7 +239,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 4),
                 Text(
                   user.email,
-                  style: TextStyle(color: Colors.grey.shade600),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
                 ),
                 const SizedBox(height: 10),
                 _buildRoleBadge(user.role),
@@ -301,44 +307,63 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     children: [
                       const Icon(Icons.swap_horiz, size: 20),
                       const SizedBox(width: 8),
-                      Text(
-                        'Chuyển Đổi Nhanh Vai Trò (Trình Chiếu Demo)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          color: theme.colorScheme.primary,
+                      Expanded(
+                        child: Text(
+                          'Chuyển Đổi Nhanh Vai Trò (Trình Chiếu Demo)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: UserRole.student,
-                        label: Text('Sinh Viên', style: TextStyle(fontSize: 11)),
-                        icon: Icon(Icons.school, size: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      style: SegmentedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                       ),
-                      ButtonSegment(
-                        value: UserRole.employer,
-                        label: Text('Doanh Nghiệp', style: TextStyle(fontSize: 11)),
-                        icon: Icon(Icons.business, size: 14),
-                      ),
-                      ButtonSegment(
-                        value: UserRole.staff,
-                        label: Text('Cán Bộ', style: TextStyle(fontSize: 11)),
-                        icon: Icon(Icons.verified_user, size: 14),
-                      ),
-                    ],
-                    selected: {user.role},
-                    onSelectionChanged: (Set<String> newSelection) {
-                      authProvider.switchRoleForDemo(newSelection.first);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'Đã chuyển sang vai trò: ${UserRole.getRoleLabel(newSelection.first)}'),
+                      segments: const [
+                        ButtonSegment(
+                          value: UserRole.student,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Sinh Viên', style: TextStyle(fontSize: 11)),
+                          ),
+                          icon: Icon(Icons.school, size: 14),
                         ),
-                      );
-                    },
+                        ButtonSegment(
+                          value: UserRole.employer,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Doanh Nghiệp', style: TextStyle(fontSize: 11)),
+                          ),
+                          icon: Icon(Icons.business, size: 14),
+                        ),
+                        ButtonSegment(
+                          value: UserRole.staff,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Cán Bộ', style: TextStyle(fontSize: 11)),
+                          ),
+                          icon: Icon(Icons.verified_user, size: 14),
+                        ),
+                      ],
+                      selected: {user.role},
+                      onSelectionChanged: (Set<String> newSelection) {
+                        authProvider.switchRoleForDemo(newSelection.first);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                'Đã chuyển sang vai trò: ${UserRole.getRoleLabel(newSelection.first)}'),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),
@@ -422,10 +447,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildInfoRow(IconData icon, String label, String value,
       {bool monospace = false}) {
+    final mutedColor = Theme.of(context).colorScheme.onSurfaceVariant;
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 20, color: Colors.grey.shade600),
+        Icon(icon, size: 20, color: mutedColor),
         const SizedBox(width: 12),
         Expanded(
           child: Column(
@@ -433,7 +459,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             children: [
               Text(
                 label,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 12, color: mutedColor),
               ),
               const SizedBox(height: 2),
               Text(

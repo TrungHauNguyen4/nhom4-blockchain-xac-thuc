@@ -331,8 +331,8 @@ app.get('/api/v1/certificates', async (req, res) => {
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
     console.log(`\n========================================`);
-    console.log(` API Gateway Blockchain Certificate Verifier chạy tại Cổng ${PORT}`);
+    console.log(` API Gateway Blockchain Certificate Verifier chạy tại Cổng ${PORT} (0.0.0.0)`);
     console.log(`========================================\n`);
 });

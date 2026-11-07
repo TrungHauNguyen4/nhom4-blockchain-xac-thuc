@@ -77,7 +77,9 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                   const SizedBox(height: 6),
                   Text(
                     item.issuerName.isNotEmpty ? item.issuerName : 'Đơn vị đào tạo',
-                    style: TextStyle(color: Colors.grey.shade600),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
                   ),
                   const SizedBox(height: 16),
 
@@ -248,7 +250,9 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                   // Trạng thái 4: Hiển thị danh sách 1 cột (dọc) hoặc 2 cột (ngang) bằng OrientationBuilder
                   return OrientationBuilder(
                     builder: (context, orientation) {
-                      final isLandscape = orientation == Orientation.landscape;
+                      final isLandscape =
+                          MediaQuery.orientationOf(context) ==
+                              Orientation.landscape;
 
                       if (isLandscape) {
                         return GridView.builder(
@@ -257,7 +261,7 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                             crossAxisCount: 2,
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
-                            childAspectRatio: 3.1,
+                            mainAxisExtent: 98,
                           ),
                           itemCount: list.length,
                           itemBuilder: (context, index) => _buildIssuedItemCard(list[index]),

@@ -86,7 +86,7 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
       context: context,
       builder: (ctx) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -112,7 +112,7 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
                 child: QrImageView(
                   data: dataHash,
                   version: QrVersions.auto,
-                  size: 230,
+                  size: 220,
                   backgroundColor: Colors.white,
                 ),
               ),
@@ -120,7 +120,11 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
               Text(
                 dataHash,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.grey),
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontFamily: 'monospace',
+                  color: Colors.grey,
+                ),
               ),
               const SizedBox(height: 16),
               SizedBox(
@@ -151,7 +155,9 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
                 _isSaved ? Icons.bookmark : Icons.bookmark_border,
                 color: _isSaved ? Colors.amberAccent : Colors.white,
               ),
-              tooltip: _isSaved ? 'Bỏ lưu khỏi Sổ tay Offline' : 'Lưu vào Sổ tay Offline (Sqflite)',
+              tooltip: _isSaved
+                  ? 'Bỏ lưu khỏi Sổ tay Offline'
+                  : 'Lưu vào Sổ tay Offline (Sqflite)',
               onPressed: _isLoading ? null : _toggleSaveOffline,
             ),
         ],
@@ -159,7 +165,9 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
       // Sử dụng OrientationBuilder để tự động đáp ứng xoay ngang (2 cột) / dọc (1 cột)
       body: OrientationBuilder(
         builder: (context, orientation) {
-          if (orientation == Orientation.portrait) {
+          final isPortrait =
+              MediaQuery.orientationOf(context) == Orientation.portrait;
+          if (isPortrait) {
             return _buildPortraitLayout(context, isValid);
           } else {
             return _buildLandscapeLayout(context, isValid);
@@ -230,10 +238,13 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
   Widget _buildSaveOfflineButton() {
     return ElevatedButton.icon(
       icon: Icon(_isSaved ? Icons.bookmark_added : Icons.download_for_offline),
-      label: Text(
-        _isSaved
-            ? 'Đã lưu trong Sổ tay Offline (Nhấn để bỏ lưu)'
-            : 'Lưu vào Sổ tay Offline (Sqflite)',
+      label: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Text(
+          _isSaved
+              ? 'Đã lưu trong Sổ tay Offline (Nhấn để bỏ lưu)'
+              : 'Lưu vào Sổ tay Offline (Sqflite)',
+        ),
       ),
       style: ElevatedButton.styleFrom(
         backgroundColor: _isSaved ? Colors.teal : null,
@@ -247,6 +258,7 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
 
   // Huy hiệu trạng thái Xác thực (Bọc FittedBox chống tràn viền theo chuẩn Chương 9 flutter_demo)
   Widget _buildStatusHeader(bool isValid) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -270,12 +282,16 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
           FittedBox(
             fit: BoxFit.scaleDown,
             child: Text(
-              isValid ? 'VĂN BẰNG HỢP LỆ (CHÍNH CHỦ)' : 'CẢNH BÁO BẰNG GIẢ / KHÔNG TỒN TẠI',
+              isValid
+                  ? 'VĂN BẰNG HỢP LỆ (CHÍNH CHỦ)'
+                  : 'CẢNH BÁO BẰNG GIẢ / KHÔNG TỒN TẠI',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
-                color: isValid ? Colors.green.shade800 : Colors.red.shade800,
+                color: isDark
+                    ? (isValid ? Colors.greenAccent : Colors.redAccent)
+                    : (isValid ? Colors.green.shade800 : Colors.red.shade800),
               ),
             ),
           ),
@@ -319,9 +335,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
   // Khung hiển thị Mã QR của Văn bằng để xuất trình Offline
   Widget _buildQrCertificateCard(BuildContext context) {
     final record = widget.record!;
-    final title = (record.degreeName != null && record.degreeName!.trim().isNotEmpty)
-        ? record.degreeName!
-        : record.fileName;
+    final title =
+        (record.degreeName != null && record.degreeName!.trim().isNotEmpty)
+            ? record.degreeName!
+            : record.fileName;
 
     return Card(
       child: Padding(
@@ -342,7 +359,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
                           alignment: Alignment.centerLeft,
                           child: Text(
                             'Mã QR Định Danh Văn Bằng',
-                            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
                           ),
                         ),
                       ),
@@ -399,9 +419,11 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
                 children: [
                   Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
                   SizedBox(width: 8),
-                  Text(
-                    'Thông tin mã băm đã kiểm tra:',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  Expanded(
+                    child: Text(
+                      'Thông tin mã băm đã kiểm tra:',
+                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    ),
                   ),
                 ],
               ),
@@ -441,40 +463,55 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            _buildInfoRow('Tệp / Hồ sơ:', record.fileName, icon: Icons.description_outlined),
-            if (record.degreeName != null && record.degreeName!.trim().isNotEmpty) ...[
+            _buildInfoRow('Tệp / Hồ sơ:', record.fileName,
+                icon: Icons.description_outlined),
+            if (record.degreeName != null &&
+                record.degreeName!.trim().isNotEmpty) ...[
               const Divider(),
-              _buildInfoRow('Tên văn bằng:', record.degreeName!, icon: Icons.school_outlined),
+              _buildInfoRow('Tên văn bằng:', record.degreeName!,
+                  icon: Icons.school_outlined),
             ],
-            if (record.studentName != null && record.studentName!.trim().isNotEmpty) ...[
+            if (record.studentName != null &&
+                record.studentName!.trim().isNotEmpty) ...[
               const Divider(),
-              _buildInfoRow('Họ tên sinh viên:', record.studentName!, icon: Icons.person_outline),
+              _buildInfoRow('Họ tên sinh viên:', record.studentName!,
+                  icon: Icons.person_outline),
             ],
-            if (record.studentCode != null && record.studentCode!.trim().isNotEmpty) ...[
+            if (record.studentCode != null &&
+                record.studentCode!.trim().isNotEmpty) ...[
               const Divider(),
-              _buildInfoRow('Mã số sinh viên:', record.studentCode!, icon: Icons.badge_outlined),
+              _buildInfoRow('Mã số sinh viên:', record.studentCode!,
+                  icon: Icons.badge_outlined),
             ],
             const Divider(),
-            _buildInfoRow('Đơn vị cấp phát:', record.issuerName, icon: Icons.account_balance_outlined),
+            _buildInfoRow('Đơn vị cấp phát:', record.issuerName,
+                icon: Icons.account_balance_outlined),
             const Divider(),
-            _buildInfoRow('Loại định dạng:', record.fileType, icon: Icons.insert_drive_file_outlined),
+            _buildInfoRow('Loại định dạng:', record.fileType,
+                icon: Icons.insert_drive_file_outlined),
             const Divider(),
-            _buildInfoRow('Ngày cấp (On-chain):', record.formattedBlockchainDate, icon: Icons.access_time),
+            _buildInfoRow('Ngày cấp (On-chain):', record.formattedBlockchainDate,
+                icon: Icons.access_time),
             if (record.blockNumber != null) ...[
               const Divider(),
-              _buildInfoRow('Số thứ tự Khối (Block):', '#${record.blockNumber}', icon: Icons.layers_outlined),
+              _buildInfoRow('Số thứ tự Khối (Block):', '#${record.blockNumber}',
+                  icon: Icons.layers_outlined),
             ],
             const Divider(),
-            _buildCopyableRow('Địa chỉ Ví đơn vị cấp (Signer):', record.signer, 'Địa chỉ Ví Signer'),
+            _buildCopyableRow('Địa chỉ Ví đơn vị cấp (Signer):', record.signer,
+                'Địa chỉ Ví Signer'),
             const Divider(),
-            _buildCopyableRow('Mã băm tài liệu (Data Hash):', record.dataHash, 'Mã Hash Keccak256'),
+            _buildCopyableRow('Mã băm tài liệu (Data Hash):', record.dataHash,
+                'Mã Hash Keccak256'),
             if (record.txHash != null && record.txHash!.trim().isNotEmpty) ...[
               const Divider(),
-              _buildCopyableRow('Mã giao dịch (TxHash Sepolia):', record.txHash!, 'Mã giao dịch TxHash'),
+              _buildCopyableRow('Mã giao dịch (TxHash Sepolia):',
+                  record.txHash!, 'Mã giao dịch TxHash'),
             ],
             if (widget.isFromOfflineVault) ...[
               const Divider(),
-              _buildInfoRow('Thời điểm lưu Offline:', record.savedAt, icon: Icons.offline_pin_outlined),
+              _buildInfoRow('Thời điểm lưu Offline:', record.savedAt,
+                  icon: Icons.offline_pin_outlined),
             ],
           ],
         ),
@@ -492,9 +529,16 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
             Icon(icon, size: 18, color: Colors.blueGrey),
             const SizedBox(width: 8),
           ],
-          Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+          Flexible(
+            flex: 4,
+            child: Text(
+              label,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+            ),
+          ),
           const SizedBox(width: 8),
           Expanded(
+            flex: 5,
             child: Text(
               value,
               textAlign: TextAlign.end,
@@ -518,7 +562,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
               Flexible(
                 child: Text(
                   label,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ),
               IconButton(
@@ -535,7 +582,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
             width: double.infinity,
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest.withValues(alpha: 0.4),
+              color: Theme.of(context)
+                  .colorScheme
+                  .surfaceContainerHighest
+                  .withValues(alpha: 0.4),
               borderRadius: BorderRadius.circular(8),
             ),
             child: SelectableText(

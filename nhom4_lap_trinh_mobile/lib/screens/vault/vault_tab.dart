@@ -260,7 +260,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                           children: [
                             Icon(Icons.science_outlined, size: 18),
                             SizedBox(width: 8),
-                            Text('Nạp văn bằng mẫu (Test Offline)'),
+                            Flexible(child: Text('Nạp văn bằng mẫu (Test Offline)')),
                           ],
                         ),
                       ),
@@ -270,7 +270,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                           children: [
                             Icon(Icons.refresh, size: 18),
                             SizedBox(width: 8),
-                            Text('Làm mới dữ liệu Sqflite'),
+                            Flexible(child: Text('Làm mới dữ liệu Sqflite')),
                           ],
                         ),
                       ),
@@ -280,7 +280,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                           children: [
                             Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.red),
                             SizedBox(width: 8),
-                            Text('Xóa toàn bộ lịch sử tra cứu'),
+                            Flexible(child: Text('Xóa toàn bộ lịch sử tra cứu')),
                           ],
                         ),
                       ),
@@ -371,7 +371,10 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 icon: const Icon(Icons.add_moderator_outlined),
-                label: const Text('Nạp nhanh 2 văn bằng mẫu để trải nghiệm'),
+                label: const FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text('Nạp nhanh 2 văn bằng mẫu để trải nghiệm'),
+                ),
                 onPressed: _seedSampleOfflineData,
               ),
             ],
@@ -384,7 +387,8 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
     // Màn hình dọc (Portrait) -> 1 cột; Màn hình ngang (Landscape) -> 2 cột
     return OrientationBuilder(
       builder: (context, orientation) {
-        final int columnCount = orientation == Orientation.portrait ? 1 : 2;
+        final int columnCount =
+            MediaQuery.orientationOf(context) == Orientation.portrait ? 1 : 2;
 
         if (columnCount == 1) {
           return ListView.separated(
@@ -409,7 +413,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
             crossAxisCount: 2,
             crossAxisSpacing: 12,
             mainAxisSpacing: 12,
-            mainAxisExtent: 175,
+            mainAxisExtent: 205,
           ),
           itemCount: _certificates.length,
           itemBuilder: (context, index) {
@@ -481,7 +485,10 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                 )
               : OrientationBuilder(
                   builder: (context, orientation) {
-                    final int columnCount = orientation == Orientation.portrait ? 1 : 2;
+                    final int columnCount =
+                        MediaQuery.orientationOf(context) == Orientation.portrait
+                            ? 1
+                            : 2;
 
                     if (columnCount == 1) {
                       return ListView.separated(
@@ -499,7 +506,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                         crossAxisCount: 2,
                         crossAxisSpacing: 12,
                         mainAxisSpacing: 10,
-                        mainAxisExtent: 128,
+                        mainAxisExtent: 150,
                       ),
                       itemCount: list.length,
                       itemBuilder: (context, index) => _buildHistoryCard(list[index]),
@@ -607,7 +614,11 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: item.isValid ? Colors.green.shade700 : Colors.redAccent,
+                        color: item.isValid
+                            ? (Theme.of(context).brightness == Brightness.dark
+                                ? Colors.greenAccent
+                                : Colors.green.shade700)
+                            : Colors.redAccent,
                         fontWeight: FontWeight.w500,
                       ),
                     ),

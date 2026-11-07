@@ -99,7 +99,10 @@ class ProgressStreamCard extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.arrow_forward),
-                    label: const Text('Xem Chi Tiết Chứng Nhận'),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Xem Chi Tiết Chứng Nhận'),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isSuccess ? Colors.green : Colors.red,
                       foregroundColor: Colors.white,
@@ -160,7 +163,10 @@ class ProgressStreamCard extends StatelessWidget {
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     icon: const Icon(Icons.qr_code_2),
-                    label: const Text('Xuất Mã QR & Biên Lai Blockchain'),
+                    label: const FittedBox(
+                      fit: BoxFit.scaleDown,
+                      child: Text('Xuất Mã QR & Biên Lai Blockchain'),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
                       foregroundColor: Colors.white,
@@ -283,7 +289,9 @@ class ProgressStreamCard extends StatelessWidget {
             const SizedBox(height: 10),
             LinearProgressIndicator(
               value: progress,
-              backgroundColor: Colors.grey.shade300,
+              backgroundColor: Theme.of(context).brightness == Brightness.dark
+                  ? Colors.white12
+                  : Colors.grey.shade300,
               color: isDone
                   ? (isSuccess ? Colors.green : Colors.red)
                   : Theme.of(context).colorScheme.primary,
@@ -316,7 +324,9 @@ class ProgressStreamCard extends StatelessWidget {
                           fontSize: 13,
                           fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
                           color: isDone
-                              ? (isSuccess ? Colors.green.shade800 : Colors.red.shade800)
+                              ? (Theme.of(context).brightness == Brightness.dark
+                                  ? (isSuccess ? Colors.greenAccent : Colors.redAccent)
+                                  : (isSuccess ? Colors.green.shade800 : Colors.red.shade800))
                               : null,
                         ),
                       ),

@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../auth/profile_screen.dart';
 import '../issuer/issue_certificate_screen.dart';
+import '../issuer/issued_list_screen.dart';
 import '../settings/settings_tab.dart';
 import '../vault/vault_tab.dart';
 import 'verify_tab.dart';
@@ -44,7 +45,8 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       VaultTab(key: _vaultKey),
-      if (isStaff) widget.issuerTab ?? const IssueCertificateScreen(),
+      if (isStaff)
+        widget.issuerTab ?? const IssueCertificateScreen(isEmbedded: true),
       widget.settingsTab ?? const SettingsTab(),
     ];
 
@@ -105,6 +107,19 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: 'Làm mới Sổ tay & Lịch sử Offline',
               onPressed: () => _vaultKey.currentState?.reloadData(),
             ),
+          if (isStaff && safeIndex == 2)
+            IconButton(
+              tooltip: 'Sổ bộ văn bằng đã ký',
+              icon: const Icon(Icons.history_edu),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const IssuedListScreen(),
+                  ),
+                );
+              },
+            ),
           if (authProvider != null)
             IconButton(
               tooltip: 'Hồ sơ người dùng',
@@ -112,7 +127,11 @@ class _HomeScreenState extends State<HomeScreen> {
                 radius: 16,
                 backgroundColor: Colors.white24,
                 backgroundImage: _getAvatarImage(user?.avatarBase64OrUrl),
-                child: user?.avatarBase64OrUrl == null
+                onBackgroundImageError:
+                    _getAvatarImage(user?.avatarBase64OrUrl) != null
+                        ? (_, _) {}
+                        : null,
+                child: _getAvatarImage(user?.avatarBase64OrUrl) == null
                     ? const Icon(Icons.person, size: 18, color: Colors.white)
                     : null,
               ),

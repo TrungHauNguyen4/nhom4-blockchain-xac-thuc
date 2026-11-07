@@ -75,7 +75,11 @@ class _SettingsTabState extends State<SettingsTab> {
                 radius: 26,
                 backgroundColor: theme.colorScheme.primaryContainer,
                 backgroundImage: _getAvatarImage(user.avatarBase64OrUrl),
-                child: user.avatarBase64OrUrl == null
+                onBackgroundImageError:
+                    _getAvatarImage(user.avatarBase64OrUrl) != null
+                        ? (_, _) {}
+                        : null,
+                child: _getAvatarImage(user.avatarBase64OrUrl) == null
                     ? Icon(Icons.person, color: theme.colorScheme.onPrimaryContainer)
                     : null,
               ),
@@ -143,8 +147,12 @@ class _SettingsTabState extends State<SettingsTab> {
                   children: [
                     Icon(Icons.dns, color: theme.colorScheme.primary),
                     const SizedBox(width: 8),
-                    const Text('Địa Chỉ External REST API (Backend):',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    const Expanded(
+                      child: Text(
+                        'Địa Chỉ External REST API (Backend):',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                      ),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 8),
@@ -152,13 +160,15 @@ class _SettingsTabState extends State<SettingsTab> {
                   controller: _ipController,
                   decoration: const InputDecoration(
                     border: OutlineInputBorder(),
-                    hintText: 'http://10.0.2.2:3000',
+                    hintText: 'http://localhost:3000',
                     helperText:
-                        'Android Emulator: 10.0.2.2:3000 | USB/ADB: localhost:3000 | LAN: IP máy',
+                        'USB/ADB: localhost:3000 | Emulator: 10.0.2.2:3000 | LAN: IP máy',
                   ),
                 ),
                 const SizedBox(height: 12),
-                Row(
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 8,
                   children: [
                     ElevatedButton.icon(
                       icon: const Icon(Icons.save, size: 18),
@@ -174,20 +184,39 @@ class _SettingsTabState extends State<SettingsTab> {
                         );
                       },
                     ),
-                    const SizedBox(width: 10),
                     OutlinedButton.icon(
                       icon: const Icon(Icons.network_check, size: 18),
                       label: const Text('Thử Kết Nối'),
                       onPressed: () async {
+                        await ApiService.saveBaseUrl(_ipController.text);
+                        if (!context.mounted) return;
                         final apiService = context.read<ApiService>();
-                        final ok = await apiService.checkServerHealth();
+                        final backendOk = await apiService.checkServerHealth();
+                        if (!context.mounted) return;
+                        if (backendOk) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              backgroundColor: Colors.green,
+                              content: Text(
+                                '✅ Kết nối Backend Node.js & SQL Server thành công!',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
+
+                        final sepoliaOk =
+                            await apiService.checkSepoliaRpcHealth();
                         if (!context.mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            backgroundColor: ok ? Colors.green : Colors.red,
-                            content: Text(ok
-                                ? '✅ Kết nối Backend Node.js thành công!'
-                                : '❌ Không thể kết nối tới Backend tại ${ApiService.baseUrl}'),
+                            backgroundColor:
+                                sepoliaOk ? Colors.teal : Colors.red,
+                            content: Text(
+                              sepoliaOk
+                                  ? '🌐 Laptop đang tắt — Đã kết nối trực tiếp Blockchain Sepolia (Tra cứu văn bằng hoạt động 100%!)'
+                                  : '❌ Không có kết nối Backend và Internet (Chỉ dùng được Sổ tay Offline Sqflite)',
+                            ),
                           ),
                         );
                       },
@@ -228,45 +257,64 @@ class _SettingsTabState extends State<SettingsTab> {
                     children: [
                       const Icon(Icons.admin_panel_settings, size: 18),
                       const SizedBox(width: 6),
-                      Text(
-                        'Chuyển Đổi Nhanh Vai Trò (Trình Chiếu Giáo Viên)',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: theme.colorScheme.primary,
+                      Expanded(
+                        child: Text(
+                          'Chuyển Đổi Nhanh Vai Trò (Trình Chiếu Giáo Viên)',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                            color: theme.colorScheme.primary,
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  SegmentedButton<String>(
-                    segments: const [
-                      ButtonSegment(
-                        value: UserRole.student,
-                        label: Text('Sinh Viên', style: TextStyle(fontSize: 11)),
-                        icon: Icon(Icons.school, size: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<String>(
+                      showSelectedIcon: false,
+                      style: SegmentedButton.styleFrom(
+                        visualDensity: VisualDensity.compact,
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
                       ),
-                      ButtonSegment(
-                        value: UserRole.employer,
-                        label: Text('Tuyển Dụng', style: TextStyle(fontSize: 11)),
-                        icon: Icon(Icons.business, size: 14),
-                      ),
-                      ButtonSegment(
-                        value: UserRole.staff,
-                        label: Text('Cán Bộ', style: TextStyle(fontSize: 11)),
-                        icon: Icon(Icons.verified_user, size: 14),
-                      ),
-                    ],
-                    selected: {user.role},
-                    onSelectionChanged: (Set<String> newSelection) {
-                      authProvider.switchRoleForDemo(newSelection.first);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'Đã kích hoạt quyền: ${UserRole.getRoleLabel(newSelection.first)}'),
+                      segments: const [
+                        ButtonSegment(
+                          value: UserRole.student,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Sinh Viên', style: TextStyle(fontSize: 11)),
+                          ),
+                          icon: Icon(Icons.school, size: 14),
                         ),
-                      );
-                    },
+                        ButtonSegment(
+                          value: UserRole.employer,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Tuyển Dụng', style: TextStyle(fontSize: 11)),
+                          ),
+                          icon: Icon(Icons.business, size: 14),
+                        ),
+                        ButtonSegment(
+                          value: UserRole.staff,
+                          label: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Cán Bộ', style: TextStyle(fontSize: 11)),
+                          ),
+                          icon: Icon(Icons.verified_user, size: 14),
+                        ),
+                      ],
+                      selected: {user.role},
+                      onSelectionChanged: (Set<String> newSelection) {
+                        authProvider.switchRoleForDemo(newSelection.first);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                                'Đã kích hoạt quyền: ${UserRole.getRoleLabel(newSelection.first)}'),
+                          ),
+                        );
+                      },
+                    ),
                   ),
                 ],
               ),

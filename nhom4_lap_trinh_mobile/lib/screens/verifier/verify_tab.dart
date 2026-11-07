@@ -298,7 +298,9 @@ class _VerifyTabState extends State<VerifyTab> {
     // Bắt buộc bọc OrientationBuilder để tự động chuyển 1 cột dọc <-> 2 cột ngang
     return OrientationBuilder(
       builder: (context, orientation) {
-        if (orientation == Orientation.portrait) {
+        final isPortrait =
+            MediaQuery.orientationOf(context) == Orientation.portrait;
+        if (isPortrait) {
           return _buildPortraitLayout(context);
         } else {
           return _buildLandscapeLayout(context);
@@ -494,9 +496,12 @@ class _VerifyTabState extends State<VerifyTab> {
         const SizedBox(height: 10),
         OutlinedButton.icon(
           icon: const Icon(Icons.photo_library_outlined, size: 20),
-          label: const Text('Chọn Ảnh Văn Bằng từ Thư viện (Băm trên RAM)'),
+          label: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Chọn Ảnh Văn Bằng từ Thư viện (Băm trên RAM)'),
+          ),
           style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           ),
           onPressed: _pickImageCertificate,

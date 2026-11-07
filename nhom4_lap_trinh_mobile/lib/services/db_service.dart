@@ -158,14 +158,14 @@ class DatabaseService {
     return result.map((json) => CertificateRecord.fromMap(json)).toList();
   }
 
-  // [READ] Lấy 1 văn bằng đã lưu trong Sổ tay theo mã Hash
+  // [READ] Lấy 1 văn bằng đã lưu trong Sổ tay theo mã Hash (không phân biệt hoa thường)
   Future<CertificateRecord?> getCertificateByHash(String dataHash) async {
     final db = await _safeDatabase();
     if (db == null) return null;
     final result = await db.query(
       'certificates',
-      where: 'dataHash = ?',
-      whereArgs: [dataHash.trim()],
+      where: 'LOWER(dataHash) = ?',
+      whereArgs: [dataHash.trim().toLowerCase()],
       limit: 1,
     );
     if (result.isNotEmpty) {
@@ -180,8 +180,8 @@ class DatabaseService {
     if (db == null) return 0;
     return await db.delete(
       'certificates',
-      where: 'dataHash = ?',
-      whereArgs: [dataHash.trim()],
+      where: 'LOWER(dataHash) = ?',
+      whereArgs: [dataHash.trim().toLowerCase()],
     );
   }
 
@@ -191,8 +191,8 @@ class DatabaseService {
     if (db == null) return false;
     final result = await db.query(
       'certificates',
-      where: 'dataHash = ?',
-      whereArgs: [dataHash],
+      where: 'LOWER(dataHash) = ?',
+      whereArgs: [dataHash.trim().toLowerCase()],
     );
     return result.isNotEmpty;
   }

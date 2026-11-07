@@ -101,33 +101,50 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                         const SizedBox(height: 10),
-                        SegmentedButton<String>(
-                          segments: const [
-                            ButtonSegment(
-                              value: UserRole.student,
-                              label: Text('Sinh Viên',
-                                  style: TextStyle(fontSize: 12)),
-                              icon: Icon(Icons.school, size: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: SegmentedButton<String>(
+                            showSelectedIcon: false,
+                            style: SegmentedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 6),
                             ),
-                            ButtonSegment(
-                              value: UserRole.employer,
-                              label: Text('Tuyển Dụng',
-                                  style: TextStyle(fontSize: 12)),
-                              icon: Icon(Icons.business, size: 16),
-                            ),
-                            ButtonSegment(
-                              value: UserRole.staff,
-                              label: Text('Cán Bộ',
-                                  style: TextStyle(fontSize: 12)),
-                              icon: Icon(Icons.verified_user, size: 16),
-                            ),
-                          ],
-                          selected: {_selectedRole},
-                          onSelectionChanged: (Set<String> newSelection) {
-                            setState(() {
-                              _selectedRole = newSelection.first;
-                            });
-                          },
+                            segments: const [
+                              ButtonSegment(
+                                value: UserRole.student,
+                                label: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Sinh Viên',
+                                      style: TextStyle(fontSize: 12)),
+                                ),
+                                icon: Icon(Icons.school, size: 16),
+                              ),
+                              ButtonSegment(
+                                value: UserRole.employer,
+                                label: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Tuyển Dụng',
+                                      style: TextStyle(fontSize: 12)),
+                                ),
+                                icon: Icon(Icons.business, size: 16),
+                              ),
+                              ButtonSegment(
+                                value: UserRole.staff,
+                                label: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text('Cán Bộ',
+                                      style: TextStyle(fontSize: 12)),
+                                ),
+                                icon: Icon(Icons.verified_user, size: 16),
+                              ),
+                            ],
+                            selected: {_selectedRole},
+                            onSelectionChanged: (Set<String> newSelection) {
+                              setState(() {
+                                _selectedRole = newSelection.first;
+                              });
+                            },
+                          ),
                         ),
                         const SizedBox(height: 8),
                         Text(

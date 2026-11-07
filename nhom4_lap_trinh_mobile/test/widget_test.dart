@@ -10,8 +10,12 @@ import 'package:nhom4_lap_trinh_mobile/models/scan_history_model.dart';
 import 'package:nhom4_lap_trinh_mobile/models/user_model.dart';
 import 'package:nhom4_lap_trinh_mobile/providers/auth_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/providers/theme_provider.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/auth/auth_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/auth/profile_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/auth/register_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/home_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/issue_certificate_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/issuer/issued_list_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/verify_detail_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/hash_service.dart';
@@ -249,5 +253,118 @@ void main() {
     expect(find.text('Trần Thị B'), findsOneWidget);
     expect(find.text('Bằng Cử nhân Công nghệ Thông tin'), findsOneWidget);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Stress Test UI - Toàn bộ màn hình không bị tràn viền (Overflow) trên màn hình hẹp & cỡ chữ lớn (Dark Mode)',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'use_mock_when_offline': true});
+    await ApiService.loadSavedConfig();
+
+    final authProvider = AuthProvider();
+    await authProvider.login('canbo@edu.vn', '123456');
+    final themeProvider = ThemeProvider();
+
+    Widget wrapWithProviders(Widget child) {
+      return MultiProvider(
+        providers: [
+          Provider<ApiService>(create: (_) => ApiService()),
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+          ChangeNotifierProvider<ThemeProvider>.value(value: themeProvider),
+        ],
+        child: MediaQuery(
+          data: const MediaQueryData(textScaler: TextScaler.linear(1.18)),
+          child: MaterialApp(
+            themeMode: ThemeMode.dark,
+            darkTheme: ThemeData.dark(useMaterial3: true),
+            builder: (context, widget) => MediaQuery(
+              data: MediaQuery.of(context)
+                  .copyWith(textScaler: const TextScaler.linear(1.18)),
+              child: widget!,
+            ),
+            home: child,
+          ),
+        ),
+      );
+    }
+
+    // Màn hình hẹp dọc (340x780 logical px) + chữ phóng to 1.18x
+    tester.view.devicePixelRatio = 1.0;
+    tester.view.physicalSize = const Size(340, 780);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    for (final screen in <Widget>[
+      const AuthScreen(),
+      const RegisterScreen(),
+      const ProfileScreen(),
+      const IssuedListScreen(),
+      const VerifyDetailScreen(
+        record: null,
+        searchedHash:
+            '0x2a82f2304fbe3f926d7d1411d9f5430dbb39f7c55764c88e6d4be5e858f5309b',
+      ),
+    ]) {
+      await tester.pumpWidget(wrapWithProviders(screen));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    // Kiểm tra cả 4 Tab trên HomeScreen ở chế độ dọc hẹp
+    await tester.pumpWidget(wrapWithProviders(const HomeScreen()));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    for (final tabLabel in ['Sổ tay & Lịch sử', 'Cấp bằng', 'Cài đặt']) {
+      await tester.tap(find.text(tabLabel));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    // Xoay ngang màn hình hẹp (780x340 logical px) kiểm tra 2 cột trên mọi Tab & IssuedListScreen
+    tester.view.physicalSize = const Size(780, 340);
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+
+    for (final tabLabel in ['Xác thực', 'Sổ tay & Lịch sử', 'Cấp bằng']) {
+      await tester.tap(find.text(tabLabel));
+      await tester.pumpAndSettle();
+      expect(tester.takeException(), isNull);
+    }
+
+    await tester.pumpWidget(wrapWithProviders(const IssuedListScreen()));
+    await tester.pumpAndSettle();
+    expect(tester.takeException(), isNull);
+  });
+
+  test(
+      'On-Chain Fallback - Giải mã trực tiếp ABI tuple getRecord(bytes32) từ Ethereum Sepolia khi tắt Laptop',
+      () {
+    const validRawHex =
+        '0x'
+        '7da94585051c2e102545a639ca12af4d6099f254c24d80b0b263f45b269554b0'
+        '000000000000000000000000df098fcea905839fa80728d806069bf06b24f145'
+        '000000000000000000000000000000000000000000000000000000006a6ac5c8';
+
+    final decoded = ApiService.decodeOnChainGetRecordResult(
+      validRawHex,
+      fallbackHash:
+          '0x7da94585051c2e102545a639ca12af4d6099f254c24d80b0b263f45b269554b0',
+    );
+    expect(decoded, isNotNull);
+    expect(decoded!.isValid, isTrue);
+    expect(
+      decoded.signer.toLowerCase(),
+      '0xdf098fcea905839fa80728d806069bf06b24f145',
+    );
+    expect(decoded.timestamp, 1785382344);
+
+    final emptyRawHex = '0x${'0' * 192}';
+    final notFound = ApiService.decodeOnChainGetRecordResult(
+      emptyRawHex,
+      fallbackHash:
+          '0x2a82f2304fbe3f926d7d1411d9f5430dbb39f7c55764c88e6d4be5e858f5309b',
+    );
+    expect(notFound, isNull);
   });
 }

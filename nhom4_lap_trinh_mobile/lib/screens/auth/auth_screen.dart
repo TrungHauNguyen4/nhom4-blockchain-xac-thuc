@@ -274,8 +274,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(height: 16),
 
                   // Đăng ký tài khoản mới
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  Wrap(
+                    alignment: WrapAlignment.center,
+                    crossAxisAlignment: WrapCrossAlignment.center,
                     children: [
                       const Text('Chưa có tài khoản? '),
                       TextButton(
@@ -309,12 +310,14 @@ class _AuthScreenState extends State<AuthScreen> {
                               Icon(Icons.flash_on,
                                   size: 18, color: theme.colorScheme.primary),
                               const SizedBox(width: 6),
-                              Text(
-                                'Đăng nhập Demo 3 Vai trò (Dành cho Giám khảo)',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                  color: theme.colorScheme.primary,
+                              Expanded(
+                                child: Text(
+                                  'Đăng nhập Demo 3 Vai trò (Dành cho Giám khảo)',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12,
+                                    color: theme.colorScheme.primary,
+                                  ),
                                 ),
                               ),
                             ],

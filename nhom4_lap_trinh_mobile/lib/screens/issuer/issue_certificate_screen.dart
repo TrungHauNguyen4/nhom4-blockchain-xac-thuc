@@ -6,8 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../models/certificate_record.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
+import '../../services/db_service.dart';
 import '../../services/hash_service.dart';
 import '../../widgets/progress_stream_card.dart';
 import 'issued_list_screen.dart';
@@ -15,7 +17,9 @@ import 'issued_list_screen.dart';
 /// Màn hình Cấp phát & Ký số Văn bằng dành riêng cho Cán bộ đào tạo
 /// Xây dựng theo Mục 2.2, Mục 3.4 (OrientationBuilder + FittedBox) và Mục 6 (kehoach.md)
 class IssueCertificateScreen extends StatefulWidget {
-  const IssueCertificateScreen({super.key});
+  final bool isEmbedded;
+
+  const IssueCertificateScreen({super.key, this.isEmbedded = false});
 
   @override
   State<IssueCertificateScreen> createState() => _IssueCertificateScreenState();
@@ -221,6 +225,24 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               setState(() {
                 _completedProgress = progress;
               });
+              // Tự động đồng bộ bản sao vào Sổ tay Offline Sqflite để khi tắt Laptop vẫn giữ đủ Họ tên, MSSV
+              if (progress.hash != null) {
+                DatabaseService.instance.saveCertificate(
+                  CertificateRecord(
+                    dataHash: progress.hash!,
+                    signer: '0xDF098FcEA905839FA80728D806069BF06b24F145',
+                    timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                    fileName: _selectedFileName ?? 'Van_Bang_Moi.pdf',
+                    fileType: _selectedFileType,
+                    txHash: progress.txHash,
+                    blockNumber: progress.blockNumber,
+                    studentName: _studentNameController.text.trim(),
+                    studentCode: _studentCodeController.text.trim(),
+                    degreeName: _degreeNameController.text.trim(),
+                    issuerName: _issuerNameController.text.trim(),
+                  ),
+                );
+              }
             }
           });
         }
@@ -265,6 +287,78 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
       );
     }
 
+    // TIÊU CHÍ BẮT BUỘC (Mục 3.4 kehoach.md): Dùng OrientationBuilder chuyển đổi 1 cột dọc <-> 2 cột ngang
+    // Dùng MediaQuery.orientationOf(context) bên trong để khi bật bàn phím ảo (viewInsets thu hẹp chiều cao)
+    // không bị đổi nhầm sang chế độ ngang gây đóng mở bàn phím liên tục.
+    final content = SafeArea(
+      top: !widget.isEmbedded,
+      child: OrientationBuilder(
+        builder: (context, orientation) {
+          final isLandscape =
+              MediaQuery.orientationOf(context) == Orientation.landscape;
+
+          return SingleChildScrollView(
+            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+            padding: const EdgeInsets.all(16),
+            child: Form(
+              key: _formKey,
+              child: isLandscape
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Cột 1 (Trái): Chọn Tài liệu & Nhập Thông tin Văn bằng
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildStep1FileSelectionCard(),
+                              const SizedBox(height: 16),
+                              _buildStep2MetadataFormCard(),
+                              const SizedBox(height: 16),
+                              _buildSignActionButton(),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        // Cột 2 (Phải): Tiến trình StreamBuilder & Biên lai Mã QR
+                        Expanded(
+                          flex: 5,
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              _buildStreamAndReceiptSection(
+                                showPlaceholderWhenIdle: true,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _buildStep1FileSelectionCard(),
+                        const SizedBox(height: 16),
+                        _buildStep2MetadataFormCard(),
+                        const SizedBox(height: 16),
+                        _buildSignActionButton(),
+                        const SizedBox(height: 16),
+                        _buildStreamAndReceiptSection(
+                          showPlaceholderWhenIdle: false,
+                        ),
+                      ],
+                    ),
+            ),
+          );
+        },
+      ),
+    );
+
+    if (widget.isEmbedded) {
+      return content;
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const FittedBox(
@@ -286,68 +380,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
           ),
         ],
       ),
-      // TIÊU CHÍ BẮT BUỘC (Mục 3.4 kehoach.md): Dùng OrientationBuilder chuyển đổi 1 cột dọc <-> 2 cột ngang
-      body: SafeArea(
-        child: OrientationBuilder(
-          builder: (context, orientation) {
-            final isLandscape = orientation == Orientation.landscape;
-
-            return SingleChildScrollView(
-              padding: const EdgeInsets.all(16),
-              child: Form(
-                key: _formKey,
-                child: isLandscape
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          // Cột 1 (Trái): Chọn Tài liệu & Nhập Thông tin Văn bằng
-                          Expanded(
-                            flex: 5,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildStep1FileSelectionCard(),
-                                const SizedBox(height: 16),
-                                _buildStep2MetadataFormCard(),
-                                const SizedBox(height: 16),
-                                _buildSignActionButton(),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          // Cột 2 (Phải): Tiến trình StreamBuilder & Biên lai Mã QR
-                          Expanded(
-                            flex: 5,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.stretch,
-                              children: [
-                                _buildStreamAndReceiptSection(
-                                  showPlaceholderWhenIdle: true,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          _buildStep1FileSelectionCard(),
-                          const SizedBox(height: 16),
-                          _buildStep2MetadataFormCard(),
-                          const SizedBox(height: 16),
-                          _buildSignActionButton(),
-                          const SizedBox(height: 16),
-                          _buildStreamAndReceiptSection(
-                            showPlaceholderWhenIdle: false,
-                          ),
-                        ],
-                      ),
-              ),
-            );
-          },
-        ),
-      ),
+      body: content,
     );
   }
 
@@ -430,6 +463,16 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
                       _selectedFileBytes!,
                       height: 160,
                       fit: BoxFit.contain,
+                      errorBuilder: (_, _, _) => const SizedBox(
+                        height: 120,
+                        child: Center(
+                          child: Icon(
+                            Icons.broken_image_outlined,
+                            size: 44,
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -462,7 +505,8 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
                           Text(
                             'Loại: $_selectedFileType • Dung lượng: ${(_selectedFileBytes!.lengthInBytes / 1024).toStringAsFixed(1)} KB',
                             style: TextStyle(
-                                fontSize: 11, color: Colors.grey.shade600),
+                                fontSize: 11,
+                                color: theme.colorScheme.onSurfaceVariant),
                           ),
                         ],
                       ),
@@ -686,12 +730,17 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
   // Khung Biên lai kết quả ký số kèm Mã QR
   Widget _buildSuccessReceiptCard(NotarizationProgress progress) {
     final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     final hash = progress.hash ?? '';
     final txHash = progress.txHash ?? '0x...';
+    final primaryTextColor = isDark ? Colors.white : Colors.black87;
+    final secondaryTextColor = isDark ? Colors.white70 : Colors.black54;
 
     return Card(
       elevation: 4,
-      color: Colors.green.shade50,
+      color: isDark
+          ? Colors.green.withValues(alpha: 0.14)
+          : Colors.green.shade50,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: Colors.green, width: 1.5),
@@ -711,7 +760,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
                     child: Text(
                       'VĂN BẰNG ĐÃ ĐƯỢC NIÊM PHONG',
                       style: theme.textTheme.titleMedium?.copyWith(
-                        color: Colors.green.shade900,
+                        color: isDark ? Colors.greenAccent : Colors.green.shade900,
                         fontWeight: FontWeight.bold,
                       ),
                     ),
@@ -742,36 +791,37 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               ),
             ),
             const SizedBox(height: 12),
-            const Text(
+            Text(
               'Mã QR chứng thực văn bằng',
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 fontSize: 13,
-                color: Colors.black87,
+                color: primaryTextColor,
               ),
             ),
-            const Text(
+            Text(
               'Sinh viên hoặc Nhà tuyển dụng có thể dùng app quét mã này để kiểm tra',
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 11, color: Colors.black54),
+              style: TextStyle(fontSize: 11, color: secondaryTextColor),
             ),
             const SizedBox(height: 16),
 
             // Chi tiết kỹ thuật
-            _buildReceiptRow('Sinh viên:', _studentNameController.text),
-            _buildReceiptRow('Văn bằng:', _degreeNameController.text),
-            _buildReceiptRow('Đơn vị cấp:', _issuerNameController.text),
-            _buildReceiptRow('TxHash:', txHash, isMono: true),
-            _buildReceiptRow('DataHash:', hash, isMono: true),
+            _buildReceiptRow('Sinh viên:', _studentNameController.text, primaryTextColor),
+            _buildReceiptRow('Văn bằng:', _degreeNameController.text, primaryTextColor),
+            _buildReceiptRow('Đơn vị cấp:', _issuerNameController.text, primaryTextColor),
+            _buildReceiptRow('TxHash:', txHash, primaryTextColor, isMono: true),
+            _buildReceiptRow('DataHash:', hash, primaryTextColor, isMono: true),
             if (progress.blockNumber != null)
-              _buildReceiptRow('Block Number:', '#${progress.blockNumber}'),
+              _buildReceiptRow('Block Number:', '#${progress.blockNumber}', primaryTextColor),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildReceiptRow(String label, String value, {bool isMono = false}) {
+  Widget _buildReceiptRow(String label, String value, Color textColor,
+      {bool isMono = false}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -781,10 +831,10 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
             width: 100,
             child: Text(
               label,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.bold,
-                color: Colors.black87,
+                color: textColor,
               ),
             ),
           ),
@@ -796,7 +846,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               style: TextStyle(
                 fontSize: 12,
                 fontFamily: isMono ? 'monospace' : null,
-                color: Colors.black87,
+                color: textColor,
               ),
             ),
           ),
