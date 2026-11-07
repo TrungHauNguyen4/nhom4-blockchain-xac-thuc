@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:firebase_auth/firebase_auth.dart' hide AuthProvider;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 
@@ -69,6 +70,7 @@ class CertificateVerifierApp extends StatelessWidget {
 }
 
 /// Cổng kiểm tra trạng thái đăng nhập tự động (AuthGate)
+/// Sử dụng StreamBuilder<User?>(stream: authStateChanges) theo chuẩn Chương 11 (flutter_demo)
 /// Điều hướng vào HomeScreen nếu đã đăng nhập, ngược lại hiển thị AuthScreen
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
@@ -77,31 +79,38 @@ class AuthGate extends StatelessWidget {
   Widget build(BuildContext context) {
     final authProvider = context.watch<AuthProvider>();
 
-    // Nếu đang nạp phiên đăng nhập từ máy
-    if (authProvider.isLoading && authProvider.currentUser == null) {
-      return const Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text(
-                'Đang kiểm tra phiên đăng nhập...',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
+    return StreamBuilder<User?>(
+      stream: authProvider.authStateChanges,
+      builder: (context, snapshot) {
+        // Kiểm tra tường minh trạng thái đang chờ luồng hoặc đang nạp hồ sơ từ máy
+        if ((snapshot.connectionState == ConnectionState.waiting ||
+                authProvider.isLoading) &&
+            authProvider.currentUser == null) {
+          return const Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text(
+                    'Đang kiểm tra phiên đăng nhập...',
+                    style: TextStyle(fontSize: 13, color: Colors.grey),
+                  ),
+                ],
               ),
-            ],
-          ),
-        ),
-      );
-    }
+            ),
+          );
+        }
 
-    // Nếu đã xác thực -> Vào màn hình chính HomeScreen
-    if (authProvider.isAuthenticated) {
-      return const HomeScreen();
-    }
+        // Nếu đã xác thực (qua Firebase Auth hoặc phiên cục bộ) -> Vào HomeScreen
+        if (authProvider.isAuthenticated || snapshot.hasData) {
+          return const HomeScreen();
+        }
 
-    // Nếu chưa đăng nhập -> Hiển thị màn hình Đăng nhập AuthScreen
-    return const AuthScreen();
+        // Nếu chưa đăng nhập -> Hiển thị màn hình Đăng nhập AuthScreen
+        return const AuthScreen();
+      },
+    );
   }
 }

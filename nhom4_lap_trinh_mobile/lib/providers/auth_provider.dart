@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
@@ -21,6 +22,9 @@ class AuthProvider extends ChangeNotifier {
         _userService = userService ?? UserService() {
     _initAuth();
   }
+
+  /// Stream lắng nghe trạng thái phiên đăng nhập từ FirebaseAuth (Chuẩn Chương 11)
+  Stream<User?> get authStateChanges => _authService.authStateChanges;
 
   UserModel? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
