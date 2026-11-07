@@ -19,6 +19,7 @@ BlockChain_chu_ky_so/backend/uploads/*
 __MACOSX/
 Bai giang dart/
 btlaptrinhmobile/
+btth2/
 flutter/
 flutter_demo/
 hoc_dart/
@@ -28,6 +29,4 @@ hoc_dart/
 # 3. File rác hệ điều hành & Office tạm
 .DS_Store
 Thumbs.db
-~$*
-
 ~$*

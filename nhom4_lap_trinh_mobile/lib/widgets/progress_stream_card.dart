@@ -1,30 +1,46 @@
 import 'package:flutter/material.dart';
 import '../services/hash_service.dart';
 
-/// Thẻ hiển thị tiến trình thời gian thực dùng chung cho cả 2 luồng:
-/// - Luồng Xác thực văn bằng (`ProgressStreamCard.verification`) -> dành cho TV3
-/// - Luồng Cấp phát / Ký số văn bằng (`ProgressStreamCard.notarization`) -> dành cho TV2
-/// Tuân thủ chuẩn Chương 10 (`flutter_demo`): kiểm tra tường minh ConnectionState.
+/// Thẻ hiển thị tiến trình thời gian thực dùng chung cho toàn bộ ứng dụng:
+/// - `ProgressStreamCard(...)` hoặc `ProgressStreamCard.verification(...)` -> Luồng Xác thực (TV1 & TV3)
+/// - `ProgressStreamCard.notarization(...)` -> Luồng Cấp phát / Ký số (TV1 & TV2)
+/// Tuân thủ chuẩn Chương 10 (`flutter_demo`): kiểm tra tường minh các trạng thái ConnectionState.
 class ProgressStreamCard extends StatelessWidget {
   final Stream<VerificationProgress>? verificationStream;
   final Stream<NotarizationProgress>? notarizationStream;
-  final void Function(VerificationProgress result)? onViewVerificationDetail;
-  final void Function(NotarizationProgress result)? onNotarizationCompleted;
+  final ValueChanged<VerificationProgress>? onCompleted;
+  final ValueChanged<VerificationProgress>? onViewVerificationDetail;
+  final ValueChanged<NotarizationProgress>? onNotarizationCompleted;
 
+  /// Constructor mặc định phục vụ trực tiếp `VerifyTab` (TV3)
+  const ProgressStreamCard({
+    super.key,
+    required Stream<VerificationProgress> stream,
+    this.onCompleted,
+    ValueChanged<VerificationProgress>? onViewDetail,
+  })  : verificationStream = stream,
+        notarizationStream = null,
+        onViewVerificationDetail = onViewDetail,
+        onNotarizationCompleted = null;
+
+  /// Constructor định danh cho luồng Thẩm định / Xác thực (TV1 & TV3)
   const ProgressStreamCard.verification({
     super.key,
     required Stream<VerificationProgress> stream,
+    this.onCompleted,
     this.onViewVerificationDetail,
   })  : verificationStream = stream,
         notarizationStream = null,
         onNotarizationCompleted = null;
 
+  /// Constructor định danh cho luồng Cấp phát / Ký số Blockchain (TV1 & TV2)
   const ProgressStreamCard.notarization({
     super.key,
     required Stream<NotarizationProgress> stream,
     this.onNotarizationCompleted,
   })  : notarizationStream = stream,
         verificationStream = null,
+        onCompleted = null,
         onViewVerificationDetail = null;
 
   @override
@@ -47,7 +63,7 @@ class ProgressStreamCard extends StatelessWidget {
       stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-          return _buildLoadingCard('Đang khởi tạo luồng thẩm định...');
+          return _buildLoadingCard('Đang khởi tạo luồng băm & đối soát...');
         }
 
         if (snapshot.hasError) {
@@ -59,12 +75,19 @@ class ProgressStreamCard extends StatelessWidget {
         }
 
         final data = snapshot.data!;
-        final bool isDone = snapshot.connectionState == ConnectionState.done || data.progress >= 1.0;
+        final bool isDone =
+            snapshot.connectionState == ConnectionState.done || data.progress >= 1.0;
         final bool isSuccess = data.step == VerificationStep.verifiedValid;
+
+        if (isDone && onCompleted != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            onCompleted!(data);
+          });
+        }
 
         return _buildProgressBody(
           context: context,
-          title: 'Tiến trình thẩm định:',
+          title: isDone ? 'Kết quả thẩm định Realtime:' : 'Tiến trình thẩm định Realtime:',
           progress: data.progress,
           statusMessage: data.statusMessage,
           errorMessage: data.errorMessage,
@@ -111,8 +134,15 @@ class ProgressStreamCard extends StatelessWidget {
         }
 
         final data = snapshot.data!;
-        final bool isDone = snapshot.connectionState == ConnectionState.done || data.progress >= 1.0;
+        final bool isDone =
+            snapshot.connectionState == ConnectionState.done || data.progress >= 1.0;
         final bool isSuccess = data.step == NotarizationStep.completed;
+
+        if (isDone && isSuccess && onNotarizationCompleted != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            onNotarizationCompleted!(data);
+          });
+        }
 
         return _buildProgressBody(
           context: context,
@@ -204,6 +234,17 @@ class ProgressStreamCard extends StatelessWidget {
               ? Colors.green.withValues(alpha: 0.08)
               : Colors.red.withValues(alpha: 0.08))
           : null,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: isDone
+              ? (isSuccess
+                  ? Colors.green.withValues(alpha: 0.5)
+                  : Colors.red.withValues(alpha: 0.5))
+              : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
       child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -226,9 +267,16 @@ class ProgressStreamCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  '${(progress * 100).toInt()}%',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    '${(progress * 100).toInt()}%',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                 ),
               ],
             ),

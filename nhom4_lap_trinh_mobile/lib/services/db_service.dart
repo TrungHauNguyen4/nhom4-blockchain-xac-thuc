@@ -1,12 +1,14 @@
+import 'package:flutter/foundation.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import '../models/certificate_record.dart';
 import '../models/scan_history_model.dart';
 
 class DatabaseService {
-  // Cấu trúc Singleton chuẩn phong cách môn học (flutter_demo)
-  static final DatabaseService instance = DatabaseService._init();
-  factory DatabaseService() => instance;
+  // Cấu trúc Singleton chuẩn phong cách môn học (flutter_demo Chương 11)
+  static final DatabaseService _databaseService = DatabaseService._init();
+  static DatabaseService get instance => _databaseService;
+  factory DatabaseService() => _databaseService;
   DatabaseService._init();
 
   static Database? _database;
@@ -15,6 +17,17 @@ class DatabaseService {
     if (_database != null) return _database!;
     _database = await _initDB('certificates_vault.db');
     return _database!;
+  }
+
+  // Truy cập an toàn cho các môi trường chưa khởi tạo native Sqflite (Web / Unit Test)
+  Future<Database?> _safeDatabase() async {
+    if (kIsWeb) return null;
+    try {
+      return await instance.database;
+    } catch (e) {
+      debugPrint('[DatabaseService] Môi trường hiện tại không hỗ trợ native Sqflite: $e');
+      return null;
+    }
   }
 
   Future<Database> _initDB(String filePath) async {
@@ -68,7 +81,6 @@ class DatabaseService {
   // Tự động nâng cấp bảng nếu người dùng đã có file database phiên bản cũ
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
-      // Bổ sung các cột mới vào certificates
       try {
         await db.execute("ALTER TABLE certificates ADD COLUMN fileType TEXT DEFAULT 'PDF'");
       } catch (_) {}
@@ -82,7 +94,6 @@ class DatabaseService {
         await db.execute("ALTER TABLE certificates ADD COLUMN issuerName TEXT DEFAULT 'Phòng Đào Tạo'");
       } catch (_) {}
 
-      // Tạo bảng scan_history nếu chưa có
       await db.execute('''
         CREATE TABLE IF NOT EXISTS scan_history (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -103,9 +114,10 @@ class DatabaseService {
   // CÁC HÀM XỬ LÝ BẢNG SỔ TAY VĂN BẰNG (CERTIFICATES)
   // ========================================================
 
-  // Lưu văn bằng vào Sổ tay Offline (Tránh trùng mã Hash)
+  // [CREATE] Lưu văn bằng vào Sổ tay Offline (Tránh trùng mã Hash)
   Future<int> saveCertificate(CertificateRecord cert) async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return 0;
     return await db.insert(
       'certificates',
       cert.toMap(),
@@ -113,31 +125,70 @@ class DatabaseService {
     );
   }
 
-  // Đọc danh sách toàn bộ văn bằng đã lưu offline
+  // [READ] Đọc danh sách toàn bộ văn bằng đã lưu offline
   Future<List<CertificateRecord>> getAllCertificates() async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return [];
     final result = await db.query('certificates', orderBy: 'id DESC');
     return result.map((json) => CertificateRecord.fromMap(json)).toList();
   }
 
-  // Tìm kiếm văn bằng offline theo từ khóa (dùng LIKE chuẩn flutter_demo)
+  // [READ] Tìm kiếm văn bằng offline theo từ khóa (dùng LIKE chuẩn flutter_demo)
   Future<List<CertificateRecord>> searchCertificates(String keyword) async {
-    final db = await instance.database;
     final clean = keyword.trim();
     if (clean.isEmpty) return getAllCertificates();
 
+    final db = await _safeDatabase();
+    if (db == null) return [];
+
     final result = await db.query(
       'certificates',
-      where: 'fileName LIKE ? OR studentName LIKE ? OR studentCode LIKE ? OR degreeName LIKE ? OR dataHash LIKE ?',
-      whereArgs: ['%$clean%', '%$clean%', '%$clean%', '%$clean%', '%$clean%'],
+      where:
+          'fileName LIKE ? OR studentName LIKE ? OR studentCode LIKE ? OR degreeName LIKE ? OR issuerName LIKE ? OR dataHash LIKE ?',
+      whereArgs: [
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+      ],
       orderBy: 'id DESC',
     );
     return result.map((json) => CertificateRecord.fromMap(json)).toList();
   }
 
-  // Kiểm tra xem chứng chỉ đã được lưu trong máy chưa
+  // [READ] Lấy 1 văn bằng đã lưu trong Sổ tay theo mã Hash
+  Future<CertificateRecord?> getCertificateByHash(String dataHash) async {
+    final db = await _safeDatabase();
+    if (db == null) return null;
+    final result = await db.query(
+      'certificates',
+      where: 'dataHash = ?',
+      whereArgs: [dataHash.trim()],
+      limit: 1,
+    );
+    if (result.isNotEmpty) {
+      return CertificateRecord.fromMap(result.first);
+    }
+    return null;
+  }
+
+  // [DELETE] Xóa văn bằng theo mã Hash
+  Future<int> deleteCertificateByHash(String dataHash) async {
+    final db = await _safeDatabase();
+    if (db == null) return 0;
+    return await db.delete(
+      'certificates',
+      where: 'dataHash = ?',
+      whereArgs: [dataHash.trim()],
+    );
+  }
+
+  // [READ] Kiểm tra xem chứng chỉ đã được lưu trong máy chưa
   Future<bool> isCertificateSaved(String dataHash) async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return false;
     final result = await db.query(
       'certificates',
       where: 'dataHash = ?',
@@ -146,9 +197,10 @@ class DatabaseService {
     return result.isNotEmpty;
   }
 
-  // Xóa một văn bằng khỏi sổ tay offline
+  // [DELETE] Xóa một văn bằng khỏi sổ tay offline
   Future<int> deleteCertificate(int id) async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return 0;
     return await db.delete(
       'certificates',
       where: 'id = ?',
@@ -160,34 +212,64 @@ class DatabaseService {
   // CÁC HÀM XỬ LÝ BẢNG LỊCH SỬ QUÉT (SCAN_HISTORY)
   // ========================================================
 
-  // Thêm một bản ghi lịch sử tra cứu
+  // [CREATE] Thêm một bản ghi lịch sử tra cứu
   Future<int> saveScanHistory(ScanHistoryModel history) async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return 0;
     return await db.insert('scan_history', history.toMap());
   }
 
-  // Lấy toàn bộ lịch sử tra cứu gần nhất
+  // [READ] Lấy toàn bộ lịch sử tra cứu gần nhất
   Future<List<ScanHistoryModel>> getAllScanHistory() async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return [];
     final result = await db.query('scan_history', orderBy: 'id DESC', limit: 100);
     return result.map((json) => ScanHistoryModel.fromMap(json)).toList();
   }
 
-  // Xóa toàn bộ lịch sử tra cứu
+  // [READ] Tìm kiếm lịch sử tra cứu offline theo từ khóa (dùng LIKE)
+  Future<List<ScanHistoryModel>> searchScanHistory(String keyword) async {
+    final clean = keyword.trim();
+    if (clean.isEmpty) return getAllScanHistory();
+
+    final db = await _safeDatabase();
+    if (db == null) return [];
+
+    final result = await db.query(
+      'scan_history',
+      where:
+          'fileName LIKE ? OR studentName LIKE ? OR degreeName LIKE ? OR issuerName LIKE ? OR dataHash LIKE ? OR scanMethod LIKE ?',
+      whereArgs: [
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+        '%$clean%',
+      ],
+      orderBy: 'id DESC',
+      limit: 100,
+    );
+    return result.map((json) => ScanHistoryModel.fromMap(json)).toList();
+  }
+
+  // [DELETE] Xóa toàn bộ lịch sử tra cứu
   Future<int> clearScanHistory() async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return 0;
     return await db.delete('scan_history');
   }
 
-  // Xóa 1 bản ghi lịch sử
+  // [DELETE] Xóa 1 bản ghi lịch sử
   Future<int> deleteScanHistory(int id) async {
-    final db = await instance.database;
+    final db = await _safeDatabase();
+    if (db == null) return 0;
     return await db.delete('scan_history', where: 'id = ?', whereArgs: [id]);
   }
 
   // Đóng cơ sở dữ liệu
   Future<void> close() async {
-    final db = await instance.database;
-    db.close();
+    final db = await _safeDatabase();
+    await db?.close();
   }
 }
