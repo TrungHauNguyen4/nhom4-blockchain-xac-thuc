@@ -70,7 +70,7 @@ class CertificateVerifierApp extends StatelessWidget {
 }
 
 /// Cổng kiểm tra trạng thái đăng nhập tự động (AuthGate)
-/// Sử dụng StreamBuilder<User?>(stream: authStateChanges) theo chuẩn Chương 11 (flutter_demo)
+/// Sử dụng `StreamBuilder<User?>(stream: authStateChanges)` theo chuẩn Chương 11 (flutter_demo)
 /// Điều hướng vào HomeScreen nếu đã đăng nhập, ngược lại hiển thị AuthScreen
 class AuthGate extends StatelessWidget {
   const AuthGate({super.key});
