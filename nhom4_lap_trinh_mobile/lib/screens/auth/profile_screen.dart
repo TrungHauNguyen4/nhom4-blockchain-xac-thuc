@@ -139,6 +139,68 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _promptStaffPasscode(BuildContext context, AuthProvider authProvider) {
+    final codeCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: Colors.amber),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Kích Hoạt Quyền Cán Bộ',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quyền Cán bộ có thể tiêu tốn phí Gas trên Blockchain. Vui lòng nhập mã ủy quyền bí mật của nhà trường:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: codeCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Mã ủy quyền Cán bộ',
+                prefixIcon: Icon(Icons.key),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final ok = await authProvider.upgradeToStaff(codeCtrl.text.trim());
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: ok ? Colors.green : Colors.red,
+                  content: Text(ok
+                      ? 'Đã kích hoạt quyền Cán bộ đào tạo thành công!'
+                      : (authProvider.errorMessage ?? 'Mã ủy quyền không chính xác!')),
+                ),
+              );
+            },
+            child: const Text('Xác nhận'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -158,6 +220,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
               context.read<AuthProvider>().logout();
             },
             child: const Text('Đăng xuất'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.red),
+            SizedBox(width: 8),
+            Text('Xóa tài khoản', style: TextStyle(color: Colors.red)),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Hành động này sẽ XÓA VĨNH VIỄN:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text('• Danh tính tài khoản trên Firebase Authentication.'),
+            Text('• Toàn bộ hồ sơ cá nhân trên Firebase Realtime Database.'),
+            Text('• Dữ liệu phiên đăng nhập trên thiết bị này.'),
+            SizedBox(height: 12),
+            Text(
+              'Lưu ý: Các văn bằng đã được ghi lên Blockchain Ethereum Sepolia trước đó vẫn sẽ được bảo toàn tính bất biến.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy bỏ'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red.shade700,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () async {
+              Navigator.pop(ctx); // Đóng dialog
+              final auth = context.read<AuthProvider>();
+              final ok = await auth.deleteAccount();
+              if (!mounted) return;
+              if (ok) {
+                Navigator.pop(context); // Thoát khỏi ProfileScreen
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    backgroundColor: Colors.green,
+                    content: Text('Đã xóa vĩnh viễn tài khoản thành công!'),
+                  ),
+                );
+              } else if (auth.errorMessage != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: Colors.red.shade700,
+                    content: Text(auth.errorMessage!),
+                  ),
+                );
+              }
+            },
+            child: const Text('Xác nhận Xóa'),
           ),
         ],
       ),
@@ -285,7 +416,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 12),
                   _buildInfoRow(
                     Icons.security,
-                    'Định danh UID',
+                    'Mã tài khoản',
                     user.uid,
                     monospace: true,
                   ),
@@ -295,7 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
 
-          // TIỆN ÍCH THUYẾT TRÌNH: Chuyển đổi nhanh vai trò để demo các màn hình
+          // Chuyển đổi nhanh vai trò sử dụng
           Card(
             color: theme.colorScheme.surfaceContainerHighest,
             child: Padding(
@@ -309,7 +440,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Chuyển Đổi Nhanh Vai Trò (Trình Chiếu Demo)',
+                          'Chuyển đổi nhanh vai trò sử dụng',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -355,13 +486,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ],
                       selected: {user.role},
                       onSelectionChanged: (Set<String> newSelection) {
-                        authProvider.switchRoleForDemo(newSelection.first);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                'Đã chuyển sang vai trò: ${UserRole.getRoleLabel(newSelection.first)}'),
-                          ),
-                        );
+                        final targetRole = newSelection.first;
+                        if (targetRole == UserRole.staff && !user.isStaff) {
+                          _promptStaffPasscode(context, authProvider);
+                        } else {
+                          authProvider.switchRoleForDemo(targetRole);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Đã chuyển sang vai trò: ${UserRole.getRoleLabel(targetRole)}'),
+                            ),
+                          );
+                        }
                       },
                     ),
                   ),
@@ -381,6 +517,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
             icon: const Icon(Icons.logout),
             label: const Text('ĐĂNG XUẤT TÀI KHOẢN'),
             onPressed: _confirmLogout,
+          ),
+          const SizedBox(height: 10),
+
+          // Nút Xóa tài khoản vĩnh viễn
+          TextButton.icon(
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.grey.shade600,
+              visualDensity: VisualDensity.compact,
+            ),
+            icon: const Icon(Icons.delete_forever_outlined, size: 18),
+            label: const Text(
+              'Xóa vĩnh viễn tài khoản',
+              style: TextStyle(
+                decoration: TextDecoration.underline,
+                fontSize: 12,
+              ),
+            ),
+            onPressed: _confirmDeleteAccount,
           ),
         ],
       ),

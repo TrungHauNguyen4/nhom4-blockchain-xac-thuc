@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -42,6 +43,9 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
+      // Dọn sạch các node demo_... cũ bị đẩy nhầm lên Firebase Realtime Database
+      unawaited(_userService.cleanupDemoNodesOnFirebase());
+
       // 1. Kiểm tra Firebase User hiện tại
       final firebaseUser = _authService.currentFirebaseUser;
       if (firebaseUser != null) {
@@ -51,7 +55,14 @@ class AuthProvider extends ChangeNotifier {
         final prefs = await SharedPreferences.getInstance();
         final lastUid = prefs.getString('last_logged_in_uid');
         if (lastUid != null && lastUid.isNotEmpty) {
-          _currentUser = await _userService.getUserProfile(lastUid);
+          final cachedUser = await _userService.getUserProfile(lastUid);
+          // Nếu phiên cũ là tài khoản giả google_user@gmail.com do lỗi trước đó thì tự động xóa bỏ
+          if (cachedUser != null && cachedUser.email == 'google_user@gmail.com') {
+            await prefs.remove('last_logged_in_uid');
+            _currentUser = null;
+          } else {
+            _currentUser = cachedUser;
+          }
         }
       }
     } catch (e) {
@@ -97,6 +108,7 @@ class AuthProvider extends ChangeNotifier {
     required String role,
     String organization = '',
     String studentCode = '',
+    String? staffPasscode,
   }) async {
     _isLoading = true;
     _errorMessage = null;
@@ -110,6 +122,7 @@ class AuthProvider extends ChangeNotifier {
         role: role,
         organization: organization,
         studentCode: studentCode,
+        staffPasscode: staffPasscode,
       );
       _currentUser = user;
       _isLoading = false;
@@ -134,6 +147,53 @@ class AuthProvider extends ChangeNotifier {
     try {
       final user = await _authService.signInWithGoogle();
       _currentUser = user;
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ========================================================
+  // [PASSWORD RESET] Gửi email đặt lại mật khẩu
+  // ========================================================
+  Future<bool> resetPassword(String email) async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.sendPasswordResetEmail(email);
+      _isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _errorMessage = e.toString();
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  // ========================================================
+  // [DELETE ACCOUNT] Xóa vĩnh viễn tài khoản (3 Tầng)
+  // ========================================================
+  Future<bool> deleteAccount() async {
+    if (_currentUser == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _authService.deleteAccount(_currentUser!.uid);
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('last_logged_in_uid');
+      _currentUser = null;
+      _errorMessage = null;
       _isLoading = false;
       notifyListeners();
       return true;
@@ -210,6 +270,24 @@ class AuthProvider extends ChangeNotifier {
       notifyListeners();
     }
     return ok;
+  }
+
+  // ========================================================
+  // [UPGRADE TO STAFF] Xác thực mã ủy quyền bảo mật (SHA-256 + Firebase /system_config) để cấp quyền Cán bộ
+  // ========================================================
+  Future<bool> upgradeToStaff(String passcode) async {
+    if (_currentUser == null) return false;
+    final isValid = await _userService.verifyStaffPasscode(passcode);
+    if (!isValid) {
+      _errorMessage = 'Mã ủy quyền Cán bộ không đúng! Vui lòng liên hệ Quản trị viên.';
+      notifyListeners();
+      return false;
+    }
+    _currentUser = _currentUser!.copyWith(role: UserRole.staff);
+    await _userService.saveUserProfile(_currentUser!);
+    _errorMessage = null;
+    notifyListeners();
+    return true;
   }
 
   // ========================================================

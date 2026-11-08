@@ -20,6 +20,52 @@ import 'package:nhom4_lap_trinh_mobile/screens/verify_detail_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/hash_service.dart';
 
+class _FakeLedgerApiService extends ApiService {
+  final Map<String, CertificateRecord> _ledger = {};
+
+  @override
+  Future<Map<String, dynamic>> notarizeCertificate({
+    required String dataHash,
+    required String fileName,
+    String fileType = 'PDF',
+    String? studentName,
+    String? studentCode,
+    String? degreeName,
+    String? issuerName,
+    String? createdByEmail,
+  }) async {
+    final key = dataHash.trim().toLowerCase();
+    const txHash =
+        '0xabc123def4567890abc123def4567890abc123def4567890abc123def4567890';
+    _ledger[key] = CertificateRecord(
+      dataHash: dataHash,
+      signer: '0xDF098FcEA905839FA80728D806069BF06b24F145',
+      timestamp: 1785382344,
+      fileName: fileName,
+      fileType: fileType,
+      txHash: txHash,
+      blockNumber: 6912099,
+      studentName: studentName,
+      studentCode: studentCode,
+      degreeName: degreeName,
+      issuerName: issuerName ?? 'Phòng Đào Tạo',
+    );
+    return {
+      'success': true,
+      'transactionHash': txHash,
+      'blockNumber': 6912099,
+    };
+  }
+
+  @override
+  Future<CertificateRecord?> verifyHash(
+    String hash, {
+    String fileName = 'Văn bằng kiểm tra',
+  }) async {
+    return _ledger[hash.trim().toLowerCase()];
+  }
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -366,5 +412,130 @@ void main() {
           '0x2a82f2304fbe3f926d7d1411d9f5430dbb39f7c55764c88e6d4be5e858f5309b',
     );
     expect(notFound, isNull);
+  });
+
+  test(
+      'Sign-then-Verify Roundtrip - Ký số file Ảnh & PDF (cả Keccak-256 và SHA-256) rồi kiểm tra lại chính file gốc phải khớp 100%',
+      () async {
+    final api = _FakeLedgerApiService();
+
+    // 1. Ký số file Ảnh bằng chuẩn Tiêu chuẩn (Keccak-256)
+    final imageBytes =
+        Uint8List.fromList([0xFF, 0xD8, 0xFF, 0xE0, 1, 2, 3, 4, 5]);
+    final signImgEvents = await HashService.notarizeFileStream(
+      fileBytes: imageBytes,
+      fileName: 'Bang_Tot_Nghiep_Goc.jpg',
+      fileType: 'IMAGE',
+      apiService: api,
+      studentName: 'Nguyễn Văn A',
+      studentCode: 'SV001',
+      degreeName: 'Kỹ sư CNTT',
+      algorithm: HashAlgorithm.keccak256,
+    ).toList();
+    expect(signImgEvents.last.step, NotarizationStep.completed);
+
+    // Đưa đúng mảng byte của bức ảnh gốc vào verifyFileStream -> Bắt buộc phải báo Hợp lệ
+    final verifyImgEvents = await HashService.verifyFileStream(
+      fileBytes: imageBytes,
+      fileName: 'Bang_Tot_Nghiep_Goc.jpg',
+      apiService: api,
+    ).toList();
+    expect(verifyImgEvents.last.step, VerificationStep.verifiedValid);
+    expect(verifyImgEvents.last.hash, signImgEvents.last.hash);
+
+    // 2. Ký số file PDF bằng chuẩn Nâng cao (SHA-256), sau đó kiểm tra lại bằng verifyFileStream mặc định
+    final pdfBytes = Uint8List.fromList('%PDF-1.7-VanBangGoc-Nhom4'.codeUnits);
+    final signPdfEvents = await HashService.notarizeFileStream(
+      fileBytes: pdfBytes,
+      fileName: 'Chung_Chi_Goc.pdf',
+      fileType: 'PDF',
+      apiService: api,
+      studentName: 'Trần Thị B',
+      studentCode: 'SV002',
+      degreeName: 'Chứng chỉ An toàn Thông tin',
+      algorithm: HashAlgorithm.sha256,
+    ).toList();
+    expect(signPdfEvents.last.step, NotarizationStep.completed);
+
+    // verifyFileStream tự động đối soát cả Keccak-256 lẫn SHA-256 nên vẫn nhận diện Hợp lệ 100%
+    final verifyPdfEvents = await HashService.verifyFileStream(
+      fileBytes: pdfBytes,
+      fileName: 'Chung_Chi_Goc.pdf',
+      apiService: api,
+    ).toList();
+    expect(verifyPdfEvents.last.step, VerificationStep.verifiedValid);
+    expect(verifyPdfEvents.last.hash, signPdfEvents.last.hash);
+
+    // 3. Nếu file bị chỉnh sửa dù chỉ 1 byte -> Phải báo Cảnh báo giả (verifiedInvalid)
+    final tamperedBytes = Uint8List.fromList([...pdfBytes, 0x01]);
+    final tamperedEvents = await HashService.verifyFileStream(
+      fileBytes: tamperedBytes,
+      fileName: 'Chung_Chi_Bi_Sua.pdf',
+      apiService: api,
+    ).toList();
+    expect(tamperedEvents.last.step, VerificationStep.verifiedInvalid);
+  });
+
+  test(
+      'Google Sign-In Security - Không bao giờ tự động đăng nhập tài khoản giả Lê Hoàng Sinh Viên khi chưa kết nối hoặc hủy chọn',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final authProvider = AuthProvider();
+
+    final ok = await authProvider.loginWithGoogle();
+    expect(ok, isFalse);
+    expect(authProvider.isAuthenticated, isFalse);
+    expect(authProvider.currentUser, isNull);
+    expect(authProvider.errorMessage, isNotNull);
+  });
+
+  test(
+      'Password Reset & Account Deletion - Kiểm tra cơ chế quên mật khẩu và xóa tài khoản vĩnh viễn',
+      () async {
+    SharedPreferences.setMockInitialValues({});
+    final authProvider = AuthProvider();
+
+    // 1. Quên mật khẩu với tài khoản demo -> Nhắc mật khẩu cố định 123456
+    final demoResetOk = await authProvider.resetPassword('canbo@edu.vn');
+    expect(demoResetOk, isFalse);
+    expect(authProvider.errorMessage, contains('123456'));
+
+    // 2. Đăng nhập tài khoản demo rồi xóa tài khoản
+    await authProvider.login('sinhvien@edu.vn', '123456');
+    expect(authProvider.isAuthenticated, isTrue);
+    expect(authProvider.currentUser, isNotNull);
+
+    final deleteOk = await authProvider.deleteAccount();
+    expect(deleteOk, isTrue);
+    expect(authProvider.isAuthenticated, isFalse);
+    expect(authProvider.currentUser, isNull);
+  });
+
+  test(
+      'Dynamic SHA-256 Staff Passcode - Kiểm tra đối chiếu băm SHA-256 và cấu hình động từ Firebase /system_config',
+      () async {
+    // 1. Mã sai bị từ chối
+    expect(UserRole.verifyPasscode('SAI-MA-123'), isFalse);
+
+    // 2. Mã ủy quyền hợp lệ khớp với SHA-256 một chiều (không cần lưu chữ thuần trong lib/)
+    final validCode = ['NHOM4', 'CANBO', '2026'].join('-');
+    expect(UserRole.verifyPasscode(validCode), isTrue);
+
+    // 3. Khi Quản trị viên đổi mã mới trên Firebase Realtime Database (/system_config)
+    final customHash = UserRole.hashPasscode('TRUONG-DH-MOI-999');
+    expect(
+      UserRole.verifyPasscode(
+        'TRUONG-DH-MOI-999',
+        remoteConfigValue: customHash,
+      ),
+      isTrue,
+    );
+    expect(
+      UserRole.verifyPasscode(
+        validCode,
+        remoteConfigValue: customHash,
+      ),
+      isFalse,
+    );
   });
 }

@@ -64,6 +64,77 @@ class _AuthScreenState extends State<AuthScreen> {
     _handleLogin();
   }
 
+  void _showForgotPasswordDialog() {
+    final emailCtrl = TextEditingController(text: _emailController.text.trim());
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.lock_reset_rounded, color: Colors.blueAccent),
+            SizedBox(width: 8),
+            Text('Đặt lại mật khẩu', style: TextStyle(fontSize: 18)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Nhập địa chỉ email của bạn để nhận liên kết đặt lại mật khẩu từ Firebase:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: emailCtrl,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(
+                labelText: 'Địa chỉ Email',
+                prefixIcon: Icon(Icons.email_outlined),
+                border: OutlineInputBorder(),
+                isDense: true,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final email = emailCtrl.text.trim();
+              if (email.isEmpty) return;
+              Navigator.pop(dialogCtx);
+              final auth = context.read<AuthProvider>();
+              final ok = await auth.resetPassword(email);
+              if (!mounted) return;
+              if (ok) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: Colors.green.shade700,
+                    content: Text(
+                      'Đã gửi liên kết đặt lại mật khẩu đến $email! Vui lòng kiểm tra hộp thư đến (hoặc Thư rác/Spam).',
+                    ),
+                  ),
+                );
+              } else if (auth.errorMessage != null) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: Colors.red.shade700,
+                    content: Text(auth.errorMessage!),
+                  ),
+                );
+              }
+            },
+            child: const Text('Gửi liên kết'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -201,7 +272,30 @@ class _AuthScreenState extends State<AuthScreen> {
                               return null;
                             },
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 6),
+
+                          // Quên mật khẩu
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: authProvider.isLoading
+                                  ? null
+                                  : _showForgotPasswordDialog,
+                              child: Text(
+                                'Quên mật khẩu?',
+                                style: TextStyle(
+                                  color: theme.colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 10),
 
                           // Nút Đăng nhập
                           SizedBox(

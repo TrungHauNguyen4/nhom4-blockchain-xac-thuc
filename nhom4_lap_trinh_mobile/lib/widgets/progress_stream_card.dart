@@ -63,11 +63,11 @@ class ProgressStreamCard extends StatelessWidget {
       stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-          return _buildLoadingCard('Đang khởi tạo luồng băm & đối soát...');
+          return _buildLoadingCard('Đang bắt đầu kiểm tra văn bằng...');
         }
 
         if (snapshot.hasError) {
-          return _buildErrorCard('Lỗi luồng xử lý: ${snapshot.error}');
+          return _buildErrorCard('Lỗi xử lý: ${snapshot.error}');
         }
 
         if (!snapshot.hasData) {
@@ -87,7 +87,7 @@ class ProgressStreamCard extends StatelessWidget {
 
         return _buildProgressBody(
           context: context,
-          title: isDone ? 'Kết quả thẩm định Realtime:' : 'Tiến trình thẩm định Realtime:',
+          title: isDone ? 'Kết quả kiểm tra:' : 'Đang kiểm tra văn bằng:',
           progress: data.progress,
           statusMessage: data.statusMessage,
           errorMessage: data.errorMessage,
@@ -101,7 +101,7 @@ class ProgressStreamCard extends StatelessWidget {
                     icon: const Icon(Icons.arrow_forward),
                     label: const FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text('Xem Chi Tiết Chứng Nhận'),
+                      child: Text('Xem Chi Tiết Văn Bằng'),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: isSuccess ? Colors.green : Colors.red,
@@ -125,11 +125,11 @@ class ProgressStreamCard extends StatelessWidget {
       stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-          return _buildLoadingCard('Đang chuẩn bị ký số văn bằng...');
+          return _buildLoadingCard('Đang chuẩn bị cấp phát văn bằng...');
         }
 
         if (snapshot.hasError) {
-          return _buildErrorCard('Lỗi luồng ký số: ${snapshot.error}');
+          return _buildErrorCard('Lỗi xử lý: ${snapshot.error}');
         }
 
         if (!snapshot.hasData) {
@@ -149,7 +149,7 @@ class ProgressStreamCard extends StatelessWidget {
 
         return _buildProgressBody(
           context: context,
-          title: 'Tiến trình ký số Blockchain:',
+          title: 'Tiến trình cấp phát văn bằng:',
           progress: data.progress,
           statusMessage: data.statusMessage,
           errorMessage: data.errorMessage,
@@ -165,7 +165,7 @@ class ProgressStreamCard extends StatelessWidget {
                     icon: const Icon(Icons.qr_code_2),
                     label: const FittedBox(
                       fit: BoxFit.scaleDown,
-                      child: Text('Xuất Mã QR & Biên Lai Blockchain'),
+                      child: Text('Xem Mã QR & Giấy Chứng Nhận'),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.green,
@@ -234,145 +234,194 @@ class ProgressStreamCard extends StatelessWidget {
     int? blockNumber,
     Widget? actionButton,
   }) {
-    return Card(
-      color: isDone
-          ? (isSuccess
-              ? Colors.green.withValues(alpha: 0.08)
-              : Colors.red.withValues(alpha: 0.08))
-          : null,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(
-          color: isDone
-              ? (isSuccess
-                  ? Colors.green.withValues(alpha: 0.5)
-                  : Colors.red.withValues(alpha: 0.5))
-              : Colors.transparent,
-          width: 1.5,
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: Card(
+        color: isDone
+            ? (isSuccess
+                ? Colors.green.withValues(alpha: 0.08)
+                : Colors.red.withValues(alpha: 0.08))
+            : null,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(
+            color: isDone
+                ? (isSuccess
+                    ? Colors.green.withValues(alpha: 0.5)
+                    : Colors.red.withValues(alpha: 0.5))
+                : Colors.transparent,
+            width: 1.5,
+          ),
         ),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${(progress * 100).toInt()}%',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 10),
-            LinearProgressIndicator(
-              value: progress,
-              backgroundColor: Theme.of(context).brightness == Brightness.dark
-                  ? Colors.white12
-                  : Colors.grey.shade300,
-              color: isDone
-                  ? (isSuccess ? Colors.green : Colors.red)
-                  : Theme.of(context).colorScheme.primary,
-              minHeight: 8,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                if (!isDone)
-                  const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                else
-                  Icon(
-                    isSuccess ? Icons.check_circle : Icons.error,
-                    color: isSuccess ? Colors.green : Colors.red,
-                    size: 20,
-                  ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: TweenAnimationBuilder<double>(
+            tween: Tween<double>(begin: 0.0, end: progress.clamp(0.0, 1.0)),
+            duration: const Duration(milliseconds: 340),
+            curve: Curves.easeOutCubic,
+            builder: (context, animatedProgress, _) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text(
-                        statusMessage,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isDone ? FontWeight.bold : FontWeight.normal,
-                          color: isDone
-                              ? (Theme.of(context).brightness == Brightness.dark
-                                  ? (isSuccess ? Colors.greenAccent : Colors.redAccent)
-                                  : (isSuccess ? Colors.green.shade800 : Colors.red.shade800))
-                              : null,
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
                         ),
                       ),
-                      if (errorMessage != null) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          'Chi tiết: $errorMessage',
-                          style: const TextStyle(fontSize: 11, color: Colors.redAccent),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 2,
                         ),
-                      ],
+                        decoration: BoxDecoration(
+                          color: Theme.of(context)
+                              .colorScheme
+                              .primary
+                              .withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${(animatedProgress * 100).round()}%',
+                          style: const TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ),
-              ],
-            ),
-            if (hash != null) ...[
-              const SizedBox(height: 10),
-              Text(
-                'Mã Hash: $hash',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-            if (txHash != null) ...[
-              const SizedBox(height: 4),
-              Text(
-                'TxHash: $txHash${blockNumber != null ? ' (Block #$blockNumber)' : ''}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontFamily: 'monospace',
-                  color: Colors.grey,
-                ),
-              ),
-            ],
-            if (actionButton != null) ...[
-              const SizedBox(height: 16),
-              actionButton,
-            ],
-          ],
+                  const SizedBox(height: 10),
+                  LinearProgressIndicator(
+                    value: animatedProgress,
+                    backgroundColor:
+                        Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white12
+                            : Colors.grey.shade300,
+                    color: isDone
+                        ? (isSuccess ? Colors.green : Colors.red)
+                        : Theme.of(context).colorScheme.primary,
+                    minHeight: 8,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 220),
+                        child: !isDone
+                            ? const SizedBox(
+                                key: ValueKey('spinner'),
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : Icon(
+                                isSuccess ? Icons.check_circle : Icons.error,
+                                key: ValueKey('done_$isSuccess'),
+                                color: isSuccess ? Colors.green : Colors.red,
+                                size: 20,
+                              ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            AnimatedSwitcher(
+                              duration: const Duration(milliseconds: 200),
+                              layoutBuilder:
+                                  (currentChild, previousChildren) => Stack(
+                                alignment: Alignment.centerLeft,
+                                children: [
+                                  ...previousChildren,
+                                  ?currentChild,
+                                ],
+                              ),
+                              child: Text(
+                                statusMessage,
+                                key: ValueKey<String>(statusMessage),
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: isDone
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                  color: isDone
+                                      ? (Theme.of(context).brightness ==
+                                              Brightness.dark
+                                          ? (isSuccess
+                                              ? Colors.greenAccent
+                                              : Colors.redAccent)
+                                          : (isSuccess
+                                              ? Colors.green.shade800
+                                              : Colors.red.shade800))
+                                      : null,
+                                ),
+                              ),
+                            ),
+                            if (errorMessage != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Chi tiết: $errorMessage',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (hash != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      'Mã văn bằng: $hash',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                  if (txHash != null) ...[
+                    const SizedBox(height: 4),
+                    Text(
+                      'Mã giao dịch: $txHash${blockNumber != null ? ' (Hồ sơ #$blockNumber)' : ''}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                  if (actionButton != null) ...[
+                    const SizedBox(height: 16),
+                    actionButton,
+                  ],
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

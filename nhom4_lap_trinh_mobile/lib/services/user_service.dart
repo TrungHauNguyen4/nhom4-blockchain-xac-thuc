@@ -9,22 +9,69 @@ import '../models/user_model.dart';
 class UserService {
   static const String _userCachePrefix = 'user_profile_cache_';
   DatabaseReference? _usersRef;
+  DatabaseReference? _configRef;
 
   UserService() {
     try {
-      _usersRef = FirebaseDatabase.instance.ref().child('users');
+      final rootRef = FirebaseDatabase.instance.ref();
+      _usersRef = rootRef.child('users');
+      _configRef = rootRef.child('system_config');
     } catch (e) {
       debugPrint('[UserService] Firebase Realtime Database chưa kết nối: $e');
       _usersRef = null;
+      _configRef = null;
     }
   }
+
+  /// Kiểm tra Mã ủy quyền Cán bộ động từ nhánh `/system_config/staff_passcode_sha256` trên Firebase Realtime Database
+  /// Kết hợp băm một chiều SHA-256 để không lưu mã gốc dạng chữ thuần trong mã nguồn Git.
+  Future<bool> verifyStaffPasscode(String? inputPasscode) async {
+    if (inputPasscode == null || inputPasscode.trim().isEmpty) return false;
+
+    String? remoteConfigValue;
+    if (_configRef != null) {
+      try {
+        final snapshot = await _configRef!.get().timeout(
+              const Duration(seconds: 3),
+            );
+        if (snapshot.exists && snapshot.value is Map) {
+          final map = snapshot.value as Map;
+          remoteConfigValue = (map['staff_passcode_sha256'] ??
+                  map['staff_passcode'] ??
+                  '')
+              .toString();
+        } else {
+          // Tự động khởi tạo nhánh cấu hình băm SHA-256 trên Firebase lần đầu để Admin quản lý từ xa
+          unawaited(_configRef!.update({
+            'staff_passcode_sha256': UserRole.defaultStaffPasscodeSha256,
+          }));
+        }
+      } catch (e) {
+        debugPrint(
+            '[UserService] Không thể đọc cấu hình mã ủy quyền từ Firebase, dùng SHA-256 mặc định: $e');
+      }
+    }
+
+    return UserRole.verifyPasscode(
+      inputPasscode,
+      remoteConfigValue: remoteConfigValue,
+    );
+  }
+
+  /// Kiểm tra xem UID có phải là tài khoản mẫu chấm thi (Demo) hay không
+  static bool isDemoUid(String uid) => uid.startsWith('demo_');
 
   // [CREATE / UPDATE] Lưu hoặc cập nhật hồ sơ người dùng lên Firebase Realtime Database & Bộ nhớ máy
   Future<bool> saveUserProfile(UserModel user) async {
     // 1. Luôn lưu vào SharedPreferences làm bộ nhớ đệm an toàn
     await _saveProfileLocally(user);
 
-    // 2. Đồng bộ lên Firebase Realtime Database nếu có kết nối
+    // 2. Nếu là tài khoản mẫu chấm thi (demo_...) thì tuyệt đối KHÔNG đẩy lên Firebase Realtime Database thật
+    if (isDemoUid(user.uid)) {
+      return true;
+    }
+
+    // 3. Đồng bộ tài khoản thật lên Firebase Realtime Database nếu có kết nối
     if (_usersRef != null) {
       try {
         await _usersRef!.child(user.uid).set(user.toMap());
@@ -36,8 +83,30 @@ class UserService {
     return true;
   }
 
+  // [CLEANUP] Tự động dọn dẹp các nhánh demo_... đã lỡ bị đẩy lên Firebase Realtime Database trước đó
+  Future<void> cleanupDemoNodesOnFirebase() async {
+    if (_usersRef == null) return;
+    const demoUids = [
+      'demo_staff_001',
+      'demo_employer_002',
+      'demo_student_003',
+    ];
+    for (final demoUid in demoUids) {
+      try {
+        await _usersRef!.child(demoUid).remove();
+      } catch (e) {
+        debugPrint('[UserService] Bỏ qua dọn dẹp $demoUid: $e');
+      }
+    }
+  }
+
   // [READ] Lấy thông tin hồ sơ của người dùng theo UID
   Future<UserModel?> getUserProfile(String uid) async {
+    // Nếu là tài khoản Demo thì đọc trực tiếp từ bộ nhớ máy
+    if (isDemoUid(uid)) {
+      return await _loadProfileLocally(uid);
+    }
+
     // 1. Thử lấy từ Firebase Realtime Database
     if (_usersRef != null) {
       try {
@@ -87,6 +156,32 @@ class UserService {
       studentCode: studentCode ?? current.studentCode,
     );
     return await saveUserProfile(updated);
+  }
+
+  // [DELETE] Xóa hồ sơ người dùng khỏi Firebase Realtime Database & Bộ nhớ máy
+  Future<bool> deleteUserProfile(String uid) async {
+    // 1. Xóa cache SharedPreferences
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('$_userCachePrefix$uid');
+      if (prefs.getString('last_logged_in_uid') == uid) {
+        await prefs.remove('last_logged_in_uid');
+      }
+    } catch (e) {
+      debugPrint('[UserService] Lỗi xóa cache local: $e');
+    }
+
+    // 2. Xóa khỏi Firebase Realtime Database nếu là tài khoản thật
+    if (_usersRef != null && !isDemoUid(uid)) {
+      try {
+        await _usersRef!.child(uid).remove();
+        return true;
+      } catch (e) {
+        debugPrint('[UserService] Lỗi xóa profile trên Firebase: $e');
+        return false;
+      }
+    }
+    return true;
   }
 
   // [REALTIME STREAM] Lắng nghe thay đổi hồ sơ thời gian thực (Chuẩn Chương 11)

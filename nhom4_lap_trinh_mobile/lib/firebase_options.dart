@@ -22,31 +22,31 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDemoBlockchainVerifierKey123456Web',
-    appId: '1:100000000000:web:abcdef1234567890',
-    messagingSenderId: '100000000000',
+    apiKey: 'AIzaSyAt3zWwjAFuYJZtbYSLeng7QzwCE_o97Bo',
+    appId: '1:460606007905:web:nhom4blockchainverifier',
+    messagingSenderId: '460606007905',
     projectId: 'nhom4-blockchain-verifier',
     authDomain: 'nhom4-blockchain-verifier.firebaseapp.com',
     databaseURL: 'https://nhom4-blockchain-verifier-default-rtdb.firebaseio.com',
-    storageBucket: 'nhom4-blockchain-verifier.appspot.com',
+    storageBucket: 'nhom4-blockchain-verifier.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDemoBlockchainVerifierKey123456Android',
-    appId: '1:100000000000:android:abcdef1234567890',
-    messagingSenderId: '100000000000',
+    apiKey: 'AIzaSyAt3zWwjAFuYJZtbYSLeng7QzwCE_o97Bo',
+    appId: '1:460606007905:android:b60e0c7eab14b1b3585820',
+    messagingSenderId: '460606007905',
     projectId: 'nhom4-blockchain-verifier',
     databaseURL: 'https://nhom4-blockchain-verifier-default-rtdb.firebaseio.com',
-    storageBucket: 'nhom4-blockchain-verifier.appspot.com',
+    storageBucket: 'nhom4-blockchain-verifier.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyDemoBlockchainVerifierKey123456iOS',
-    appId: '1:100000000000:ios:abcdef1234567890',
-    messagingSenderId: '100000000000',
+    apiKey: 'AIzaSyAt3zWwjAFuYJZtbYSLeng7QzwCE_o97Bo',
+    appId: '1:460606007905:ios:b60e0c7eab14b1b3585820',
+    messagingSenderId: '460606007905',
     projectId: 'nhom4-blockchain-verifier',
     databaseURL: 'https://nhom4-blockchain-verifier-default-rtdb.firebaseio.com',
-    storageBucket: 'nhom4-blockchain-verifier.appspot.com',
+    storageBucket: 'nhom4-blockchain-verifier.firebasestorage.app',
     iosBundleId: 'com.example.nhom4LapTrinhMobile',
   );
 }

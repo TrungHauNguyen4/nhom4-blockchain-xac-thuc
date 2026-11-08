@@ -43,27 +43,32 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   // ========================================================
-  // BỘ THEME CHUẨN CÔNG NGHỆ BLOCKCHAIN (Material 3)
+  // BỘ THEME PHONG CÁCH GLASSMORPHISM V7 (Material 3)
   // ========================================================
   static final ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF1E88E5), // Xanh dương công nghệ
+      seedColor: const Color(0xFF1E88E5),
       brightness: Brightness.light,
-      primary: const Color(0xFF0D47A1),
+      primary: const Color(0xFF1558B0),
       secondary: const Color(0xFF00897B),
-      surface: Colors.white,
+      surface: const Color(0xFFFAFCFF),
     ),
+    scaffoldBackgroundColor: const Color(0xFFF2F5FA),
     appBarTheme: const AppBarTheme(
       elevation: 0,
       centerTitle: true,
-      backgroundColor: Color(0xFF0D47A1),
+      backgroundColor: Color(0xFF14213D),
       foregroundColor: Colors.white,
     ),
     cardTheme: CardThemeData(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: Colors.white.withValues(alpha: 0.94),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+      ),
     ),
   );
 
@@ -75,19 +80,22 @@ class ThemeProvider extends ChangeNotifier {
       brightness: Brightness.dark,
       primary: const Color(0xFF90CAF9),
       secondary: const Color(0xFF4DB6AC),
-      surface: const Color(0xFF1E1E2C),
+      surface: const Color(0xFF1C1E2B),
     ),
-    scaffoldBackgroundColor: const Color(0xFF12121E),
+    scaffoldBackgroundColor: const Color(0xFF11131D),
     appBarTheme: const AppBarTheme(
       elevation: 0,
       centerTitle: true,
-      backgroundColor: Color(0xFF1E1E2C),
+      backgroundColor: Color(0xFF171A26),
       foregroundColor: Colors.white,
     ),
     cardTheme: CardThemeData(
-      color: const Color(0xFF1E1E2C),
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      color: const Color(0xFF212434).withValues(alpha: 0.86),
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(22),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.12), width: 1.1),
+      ),
     ),
   );
 }

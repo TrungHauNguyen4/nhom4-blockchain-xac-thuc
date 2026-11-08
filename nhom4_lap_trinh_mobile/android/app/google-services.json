@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "460606007905",
+    "firebase_url": "https://nhom4-blockchain-verifier-default-rtdb.firebaseio.com",
+    "project_id": "nhom4-blockchain-verifier",
+    "storage_bucket": "nhom4-blockchain-verifier.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:460606007905:android:b60e0c7eab14b1b3585820",
+        "android_client_info": {
+          "package_name": "com.example.nhom4_lap_trinh_mobile"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "460606007905-ruebinf59er869iqe6r9o6spkkt1iulm.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.nhom4_lap_trinh_mobile",
+            "certificate_hash": "31f7eda2f2da04dabd75f3c0abcfe2c9a7a2a598"
+          }
+        },
+        {
+          "client_id": "460606007905-3h0e26dgjqpg7g6ut2br6b9ouhcqeoqa.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAt3zWwjAFuYJZtbYSLeng7QzwCE_o97Bo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "460606007905-3h0e26dgjqpg7g6ut2br6b9ouhcqeoqa.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

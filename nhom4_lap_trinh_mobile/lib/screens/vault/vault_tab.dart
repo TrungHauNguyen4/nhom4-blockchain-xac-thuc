@@ -196,19 +196,19 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         backgroundColor: Colors.green,
-        content: Text('Đã nạp 2 văn bằng mẫu & 2 lịch sử tra cứu vào Sqflite Offline!'),
+        content: Text('Đã tải 2 văn bằng mẫu & 2 lịch sử tra cứu vào bộ nhớ máy!'),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Column(
       children: [
-        // Thanh tìm kiếm Offline (Sqflite LIKE) & TabBar con
+        // Thanh tìm kiếm & TabBar con phong cách Glassy Pill V7
         Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 4),
-          color: Theme.of(context).colorScheme.surface,
+          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
           child: Column(
             children: [
               Row(
@@ -218,15 +218,32 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                       controller: _searchController,
                       onChanged: (_) => reloadData(),
                       decoration: InputDecoration(
-                        hintText: 'Tìm Offline theo Tên SV, MSSV, Văn bằng, Đơn vị, Hash...',
+                        hintText: 'Tìm theo Tên SV, MSSV, Văn bằng, Đơn vị...',
                         prefixIcon: const Icon(Icons.search, size: 20),
+                        filled: true,
+                        fillColor: isDark
+                            ? const Color(0xFF222536).withValues(alpha: 0.85)
+                            : Colors.white.withValues(alpha: 0.90),
                         isDense: true,
                         contentPadding: const EdgeInsets.symmetric(
                           horizontal: 12,
                           vertical: 10,
                         ),
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.14)
+                                : const Color(0xFFDCE4F0),
+                          ),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(18),
+                          borderSide: BorderSide(
+                            color: isDark
+                                ? Colors.white.withValues(alpha: 0.14)
+                                : const Color(0xFFDCE4F0),
+                          ),
                         ),
                         suffixIcon: _searchController.text.isNotEmpty
                             ? IconButton(
@@ -242,7 +259,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                   ),
                   const SizedBox(width: 8),
                   PopupMenuButton<String>(
-                    tooltip: 'Tiện ích Sổ tay Offline',
+                    tooltip: 'Tùy chọn sổ tay',
                     icon: const Icon(Icons.more_vert),
                     onSelected: (value) {
                       if (value == 'seed') {
@@ -260,7 +277,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                           children: [
                             Icon(Icons.science_outlined, size: 18),
                             SizedBox(width: 8),
-                            Flexible(child: Text('Nạp văn bằng mẫu (Test Offline)')),
+                            Flexible(child: Text('Tải văn bằng mẫu dùng thử')),
                           ],
                         ),
                       ),
@@ -270,7 +287,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                           children: [
                             Icon(Icons.refresh, size: 18),
                             SizedBox(width: 8),
-                            Flexible(child: Text('Làm mới dữ liệu Sqflite')),
+                            Flexible(child: Text('Làm mới danh sách')),
                           ],
                         ),
                       ),
@@ -288,39 +305,79 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                   ),
                 ],
               ),
-              const SizedBox(height: 6),
-              TabBar(
-                controller: _subTabController,
-                labelColor: Theme.of(context).colorScheme.primary,
-                indicatorColor: Theme.of(context).colorScheme.primary,
-                tabs: [
-                  Tab(
-                    icon: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.bookmark_added_outlined, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Sổ tay đã lưu (${_certificates.length})'),
-                        ],
+              const SizedBox(height: 10),
+              Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: isDark
+                      ? const Color(0xFF26293A).withValues(alpha: 0.85)
+                      : const Color(0xFFE4E9F2),
+                  borderRadius: BorderRadius.circular(999),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : Colors.white.withValues(alpha: 0.9),
+                  ),
+                ),
+                child: TabBar(
+                  controller: _subTabController,
+                  dividerColor: Colors.transparent,
+                  splashFactory: NoSplash.splashFactory,
+                  overlayColor: WidgetStateProperty.all(Colors.transparent),
+                  indicatorSize: TabBarIndicatorSize.tab,
+                  indicatorAnimation: TabIndicatorAnimation.elastic,
+                  indicator: BoxDecoration(
+                    color: isDark ? Colors.white : const Color(0xFF1E2230),
+                    borderRadius: BorderRadius.circular(999),
+                    boxShadow: [
+                      BoxShadow(
+                        color: isDark
+                            ? Colors.white.withValues(alpha: 0.25)
+                            : Colors.black.withValues(alpha: 0.18),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  labelColor: isDark ? const Color(0xFF161822) : Colors.white,
+                  unselectedLabelColor:
+                      isDark ? Colors.white70 : const Color(0xFF4A5060),
+                  tabs: [
+                    Tab(
+                      height: 38,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.bookmark_added_outlined, size: 17),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Sổ tay đã lưu (${_certificates.length})',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  Tab(
-                    icon: FittedBox(
-                      fit: BoxFit.scaleDown,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.history, size: 18),
-                          const SizedBox(width: 6),
-                          Text('Lịch sử tra cứu (${_scanHistory.length})'),
-                        ],
+                    Tab(
+                      height: 38,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.history, size: 17),
+                            const SizedBox(width: 6),
+                            Text(
+                              'Lịch sử tra cứu (${_scanHistory.length})',
+                              style: const TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),

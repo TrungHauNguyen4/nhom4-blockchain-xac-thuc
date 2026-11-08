@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
@@ -12,6 +13,7 @@ import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../services/hash_service.dart';
 import '../../widgets/progress_stream_card.dart';
+import '../verifier/verify_detail_screen.dart';
 import 'issued_list_screen.dart';
 
 /// Màn hình Cấp phát & Ký số Văn bằng dành riêng cho Cán bộ đào tạo
@@ -110,14 +112,17 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
   Future<void> _pickImage(ImageSource source) async {
     try {
       final picker = ImagePicker();
+      // QUAN TRỌNG: Không truyền maxWidth / maxHeight / imageQuality để giữ nguyên 100%
+      // chuỗi byte nhị phân gốc của bức ảnh (tránh bị Android tự động resize thành scaled_...jpg
+      // gây lệch mã Hash khi đối chiếu lại với bức ảnh gốc trên máy).
       final XFile? file = await picker.pickImage(
         source: source,
-        maxWidth: 1920,
-        maxHeight: 1080,
       );
 
       if (file != null) {
-        final bytes = await file.readAsBytes();
+        final Uint8List bytes = (!kIsWeb && file.path.isNotEmpty)
+            ? await File(file.path).readAsBytes()
+            : await file.readAsBytes();
         if (!mounted) return;
         setState(() {
           _selectedFileBytes = bytes;
@@ -614,16 +619,16 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Chọn thuật toán băm
+            // Chọn chuẩn bảo mật
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
               spacing: 8,
               runSpacing: 6,
               children: [
-                const Text('Mã băm: ',
+                const Text('Chuẩn bảo mật: ',
                     style: TextStyle(fontWeight: FontWeight.bold)),
                 ChoiceChip(
-                  label: const Text('Keccak-256 (Chuẩn Sepolia)',
+                  label: const Text('Tiêu chuẩn (Khuyên dùng)',
                       style: TextStyle(fontSize: 11)),
                   selected: _selectedAlgorithm == HashAlgorithm.keccak256,
                   onSelected: (_) {
@@ -633,7 +638,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
                   },
                 ),
                 ChoiceChip(
-                  label: const Text('SHA-256', style: TextStyle(fontSize: 11)),
+                  label: const Text('Nâng cao (SHA-256)', style: TextStyle(fontSize: 11)),
                   selected: _selectedAlgorithm == HashAlgorithm.sha256,
                   onSelected: (_) {
                     setState(() {
@@ -652,20 +657,20 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
   // Nút Ký số
   Widget _buildSignActionButton() {
     return SizedBox(
-      height: 48,
+      height: 50,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF673AB7), // Tím ký số
+          backgroundColor: const Color(0xFF5E35B1),
           foregroundColor: Colors.white,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(16),
           ),
         ),
-        icon: const Icon(Icons.lock_clock),
+        icon: const Icon(Icons.verified_outlined),
         label: const FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            'KÝ SỐ VÀ NIÊM PHONG LÊN BLOCKCHAIN',
+            'XÁC NHẬN & CẤP MÃ QR VĂN BẰNG',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
@@ -696,7 +701,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               ),
               const SizedBox(height: 6),
               const Text(
-                'Sau khi chọn Ảnh/PDF và bấm nút Ký số ở cột bên trái, tiến trình băm trên RAM và mã QR niêm phong Blockchain sẽ xuất hiện tại đây.',
+                'Sau khi chọn Ảnh/PDF và bấm nút Xác nhận ở cột bên trái, tiến trình xử lý và mã QR văn bằng sẽ xuất hiện tại đây.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12, color: Colors.grey),
               ),
@@ -706,24 +711,29 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
       );
     }
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        if (_notarizeStream != null)
-          ProgressStreamCard.notarization(
-            stream: _notarizeStream!,
-            onNotarizationCompleted: (progress) {
-              setState(() {
-                _completedProgress = progress;
-              });
-            },
-          ),
-        if (_completedProgress != null &&
-            _completedProgress!.step == NotarizationStep.completed) ...[
-          const SizedBox(height: 16),
-          _buildSuccessReceiptCard(_completedProgress!),
+    return AnimatedSize(
+      duration: const Duration(milliseconds: 280),
+      curve: Curves.easeOutCubic,
+      alignment: Alignment.topCenter,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          if (_notarizeStream != null)
+            ProgressStreamCard.notarization(
+              stream: _notarizeStream!,
+              onNotarizationCompleted: (progress) {
+                setState(() {
+                  _completedProgress = progress;
+                });
+              },
+            ),
+          if (_completedProgress != null &&
+              _completedProgress!.step == NotarizationStep.completed) ...[
+            const SizedBox(height: 16),
+            _buildSuccessReceiptCard(_completedProgress!),
+          ],
         ],
-      ],
+      ),
     );
   }
 
@@ -806,14 +816,66 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Chi tiết kỹ thuật
+            // Chi tiết văn bằng
             _buildReceiptRow('Sinh viên:', _studentNameController.text, primaryTextColor),
             _buildReceiptRow('Văn bằng:', _degreeNameController.text, primaryTextColor),
             _buildReceiptRow('Đơn vị cấp:', _issuerNameController.text, primaryTextColor),
-            _buildReceiptRow('TxHash:', txHash, primaryTextColor, isMono: true),
-            _buildReceiptRow('DataHash:', hash, primaryTextColor, isMono: true),
+            _buildReceiptRow('Mã giao dịch:', txHash, primaryTextColor, isMono: true),
+            _buildReceiptRow('Mã văn bằng:', hash, primaryTextColor, isMono: true),
             if (progress.blockNumber != null)
-              _buildReceiptRow('Block Number:', '#${progress.blockNumber}', primaryTextColor),
+              _buildReceiptRow('Số hồ sơ:', '#${progress.blockNumber}', primaryTextColor),
+            const SizedBox(height: 14),
+            Wrap(
+              spacing: 10,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.copy, size: 17),
+                  label: const Text('Sao chép mã văn bằng'),
+                  onPressed: () {
+                    Clipboard.setData(ClipboardData(text: hash));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Đã sao chép mã số văn bằng vào bộ nhớ tạm'),
+                      ),
+                    );
+                  },
+                ),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.verified_outlined, size: 18),
+                  label: const Text('Kiểm tra thử tệp vừa cấp'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () {
+                    final certRecord = CertificateRecord(
+                      dataHash: hash,
+                      signer: '0xDF098FcEA905839FA80728D806069BF06b24F145',
+                      timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                      fileName: _selectedFileName ?? 'Van_Bang_Moi.pdf',
+                      fileType: _selectedFileType,
+                      txHash: progress.txHash,
+                      blockNumber: progress.blockNumber,
+                      studentName: _studentNameController.text.trim(),
+                      studentCode: _studentCodeController.text.trim(),
+                      degreeName: _degreeNameController.text.trim(),
+                      issuerName: _issuerNameController.text.trim(),
+                    );
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => VerifyDetailScreen(
+                          record: certRecord,
+                          searchedHash: hash,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ],
         ),
       ),

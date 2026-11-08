@@ -32,6 +32,68 @@ class _SettingsTabState extends State<SettingsTab> {
     super.dispose();
   }
 
+  void _promptStaffPasscode(BuildContext context, AuthProvider authProvider) {
+    final codeCtrl = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.shield_outlined, color: Colors.amber),
+            SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                'Kích Hoạt Quyền Cán Bộ',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Quyền Cán bộ có thể tiêu tốn phí Gas trên Blockchain. Vui lòng nhập mã ủy quyền bí mật của nhà trường:',
+              style: TextStyle(fontSize: 13),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: codeCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Mã ủy quyền Cán bộ',
+                prefixIcon: Icon(Icons.key),
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final ok = await authProvider.upgradeToStaff(codeCtrl.text.trim());
+              if (!ctx.mounted) return;
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  backgroundColor: ok ? Colors.green : Colors.red,
+                  content: Text(ok
+                      ? 'Đã kích hoạt quyền Cán bộ đào tạo thành công!'
+                      : (authProvider.errorMessage ?? 'Mã ủy quyền không chính xác!')),
+                ),
+              );
+            },
+            child: const Text('Xác nhận'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _confirmLogout() {
     showDialog(
       context: context,
@@ -120,16 +182,16 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         const SizedBox(height: 14),
 
-        // 2. CÀI ĐẶT GIAO DIỆN DARK MODE (LƯU BẰNG SHAREDPREFERENCES)
+        // 2. CÀI ĐẶT GIAO DIỆN DARK MODE
         Card(
           child: SwitchListTile(
             secondary: Icon(
               themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
               color: theme.colorScheme.primary,
             ),
-            title: const Text('Chế độ Tối (Dark Theme)',
+            title: const Text('Giao diện Tối',
                 style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('Tự động lưu trạng thái vào SharedPreferences'),
+            subtitle: const Text('Dịu mắt hơn khi sử dụng vào ban đêm'),
             value: themeProvider.isDarkMode,
             onChanged: (val) => themeProvider.toggleTheme(val),
           ),
@@ -149,7 +211,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     const SizedBox(width: 8),
                     const Expanded(
                       child: Text(
-                        'Địa Chỉ External REST API (Backend):',
+                        'Địa chỉ máy chủ kết nối:',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                       ),
                     ),
@@ -162,7 +224,7 @@ class _SettingsTabState extends State<SettingsTab> {
                     border: OutlineInputBorder(),
                     hintText: 'http://localhost:3000',
                     helperText:
-                        'USB/ADB: localhost:3000 | Emulator: 10.0.2.2:3000 | LAN: IP máy',
+                        'Cắm cáp USB: localhost:3000 | Chung Wi-Fi: IP máy tính',
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -198,7 +260,7 @@ class _SettingsTabState extends State<SettingsTab> {
                             const SnackBar(
                               backgroundColor: Colors.green,
                               content: Text(
-                                '✅ Kết nối Backend Node.js & SQL Server thành công!',
+                                '✅ Đã kết nối thành công với máy chủ cấp bằng!',
                               ),
                             ),
                           );
@@ -214,8 +276,8 @@ class _SettingsTabState extends State<SettingsTab> {
                                 sepoliaOk ? Colors.teal : Colors.red,
                             content: Text(
                               sepoliaOk
-                                  ? '🌐 Laptop đang tắt — Đã kết nối trực tiếp Blockchain Sepolia (Tra cứu văn bằng hoạt động 100%!)'
-                                  : '❌ Không có kết nối Backend và Internet (Chỉ dùng được Sổ tay Offline Sqflite)',
+                                  ? '🌐 Máy tính đang tắt — Đã kết nối trực tiếp sổ gốc trực tuyến (Tra cứu văn bằng hoạt động 100%!)'
+                                  : '❌ Không có kết nối mạng (Chỉ xem được các văn bằng đã lưu trên máy)',
                             ),
                           ),
                         );
@@ -225,13 +287,13 @@ class _SettingsTabState extends State<SettingsTab> {
                 ),
                 const SizedBox(height: 12),
                 const Divider(),
-                // Chế độ Mock Offline hỗ trợ bảo vệ khi không có mạng
+                // Chế độ dùng thử
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
                   secondary: const Icon(Icons.cloud_off, color: Colors.orange),
-                  title: const Text('Chế độ Giả lập Offline (Mock Mode)',
+                  title: const Text('Chế độ dùng thử (Không cần máy chủ)',
                       style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: const Text('Hỗ trợ test giao diện mượt mà không cần bật Server'),
+                  subtitle: const Text('Dùng thử tính năng cấp bằng mẫu khi chưa bật máy tính'),
                   value: ApiService.useMockWhenOffline,
                   onChanged: (val) async {
                     await ApiService.setMockMode(val);
@@ -244,7 +306,7 @@ class _SettingsTabState extends State<SettingsTab> {
         ),
         const SizedBox(height: 14),
 
-        // 4. TIỆN ÍCH THUYẾT TRÌNH BẢO VỆ ĐỒ ÁN (ĐỔI NHANH 3 VAI TRÒ)
+        // 4. TIỆN ÍCH CHUYỂN ĐỔI NHANH VAI TRÒ
         if (user != null)
           Card(
             color: theme.colorScheme.surfaceContainerHighest,
@@ -259,7 +321,7 @@ class _SettingsTabState extends State<SettingsTab> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Chuyển Đổi Nhanh Vai Trò (Trình Chiếu Giáo Viên)',
+                          'Chuyển đổi nhanh vai trò sử dụng',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             fontSize: 12,
@@ -306,13 +368,18 @@ class _SettingsTabState extends State<SettingsTab> {
                       ],
                       selected: {user.role},
                       onSelectionChanged: (Set<String> newSelection) {
-                        authProvider.switchRoleForDemo(newSelection.first);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                                'Đã kích hoạt quyền: ${UserRole.getRoleLabel(newSelection.first)}'),
-                          ),
-                        );
+                        final targetRole = newSelection.first;
+                        if (targetRole == UserRole.staff && !user.isStaff) {
+                          _promptStaffPasscode(context, authProvider);
+                        } else {
+                          authProvider.switchRoleForDemo(targetRole);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Đã kích hoạt quyền: ${UserRole.getRoleLabel(targetRole)}'),
+                            ),
+                          );
+                        }
                       },
                     ),
                   ),
@@ -322,23 +389,19 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         const SizedBox(height: 14),
 
-        // 5. THÔNG TIN HỆ THỐNG
+        // 5. THÔNG TIN ỨNG DỤNG
         const Card(
           child: Padding(
             padding: EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Kiến Trúc & Phân Công Nhóm 4',
+                Text('Giới Thiệu Ứng Dụng (Nhóm 4)',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                 SizedBox(height: 8),
-                Text('• Thành viên 1: Backend API, SQL Server, Smart Contract & Core Hash'),
-                Text('• Thành viên 2: Firebase Auth, Hồ sơ Phân quyền, Màn hình Ký số & Cài đặt'),
-                Text('• Thành viên 3: Luồng Quét QR, Sổ tay Sqflite & Responsive UI'),
-                Divider(height: 16),
-                Text('• Smart Contract: SignedRecordRegistry.sol (Ethereum Sepolia)'),
-                Text('• Backend: Node.js Express + Ethers.js v6'),
-                Text('• Database: SQL Server EnterpriseNotaryDB + Firebase RTDB + Sqflite'),
+                Text('• Tra cứu văn bằng, chứng chỉ nhanh chóng qua mã QR hoặc tệp PDF/Ảnh.'),
+                Text('• Cấp phát văn bằng điện tử có chữ ký số chống làm giả.'),
+                Text('• Hỗ trợ lưu văn bằng về điện thoại để xuất trình ngay cả khi không có mạng.'),
               ],
             ),
           ),

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../providers/auth_provider.dart';
+import '../../widgets/glass_widgets.dart';
 import '../auth/profile_screen.dart';
 import '../issuer/issue_certificate_screen.dart';
 import '../issuer/issued_list_screen.dart';
@@ -50,26 +51,26 @@ class _HomeScreenState extends State<HomeScreen> {
       widget.settingsTab ?? const SettingsTab(),
     ];
 
-    final List<NavigationDestination> destinations = [
-      const NavigationDestination(
-        icon: Icon(Icons.verified_outlined),
-        selectedIcon: Icon(Icons.verified),
+    final List<GlassNavItem> navItems = [
+      const GlassNavItem(
+        icon: Icons.verified_outlined,
+        selectedIcon: Icons.verified,
         label: 'Xác thực',
       ),
-      const NavigationDestination(
-        icon: Icon(Icons.folder_special_outlined),
-        selectedIcon: Icon(Icons.folder_special),
+      const GlassNavItem(
+        icon: Icons.folder_special_outlined,
+        selectedIcon: Icons.folder_special,
         label: 'Sổ tay & Lịch sử',
       ),
       if (isStaff)
-        const NavigationDestination(
-          icon: Icon(Icons.workspace_premium_outlined),
-          selectedIcon: Icon(Icons.workspace_premium),
+        const GlassNavItem(
+          icon: Icons.workspace_premium_outlined,
+          selectedIcon: Icons.workspace_premium,
           label: 'Cấp bằng',
         ),
-      const NavigationDestination(
-        icon: Icon(Icons.settings_outlined),
-        selectedIcon: Icon(Icons.settings),
+      const GlassNavItem(
+        icon: Icons.settings_outlined,
+        selectedIcon: Icons.settings,
         label: 'Cài đặt',
       ),
     ];
@@ -83,11 +84,17 @@ class _HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment:
               user == null ? CrossAxisAlignment.center : CrossAxisAlignment.start,
           children: [
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                _getTitleForTab(safeIndex, isStaff),
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 220),
+              switchInCurve: Curves.easeOutCubic,
+              switchOutCurve: Curves.easeInCubic,
+              child: FittedBox(
+                key: ValueKey<String>(_getTitleForTab(safeIndex, isStaff)),
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  _getTitleForTab(safeIndex, isStaff),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
             if (user != null)
@@ -104,12 +111,12 @@ class _HomeScreenState extends State<HomeScreen> {
           if (safeIndex == 1)
             IconButton(
               icon: const Icon(Icons.refresh),
-              tooltip: 'Làm mới Sổ tay & Lịch sử Offline',
+              tooltip: 'Làm mới danh sách đã lưu',
               onPressed: () => _vaultKey.currentState?.reloadData(),
             ),
           if (isStaff && safeIndex == 2)
             IconButton(
-              tooltip: 'Sổ bộ văn bằng đã ký',
+              tooltip: 'Danh sách văn bằng đã cấp',
               icon: const Icon(Icons.history_edu),
               onPressed: () {
                 Navigator.push(
@@ -122,7 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           if (authProvider != null)
             IconButton(
-              tooltip: 'Hồ sơ người dùng',
+              tooltip: 'Hồ sơ cá nhân',
               icon: CircleAvatar(
                 radius: 16,
                 backgroundColor: Colors.white24,
@@ -145,11 +152,13 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 4),
         ],
       ),
-      body: IndexedStack(
-        index: safeIndex,
-        children: pages,
+      body: GlassScaffoldBackground(
+        child: GlassAnimatedIndexedStack(
+          index: safeIndex,
+          children: pages,
+        ),
       ),
-      bottomNavigationBar: NavigationBar(
+      bottomNavigationBar: GlassyBottomNavBar(
         selectedIndex: safeIndex,
         onDestinationSelected: (index) {
           setState(() => _currentTabIndex = index);
@@ -157,7 +166,7 @@ class _HomeScreenState extends State<HomeScreen> {
             _vaultKey.currentState?.reloadData();
           }
         },
-        destinations: destinations,
+        items: navItems,
       ),
     );
   }
@@ -179,24 +188,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (isStaff) {
       switch (index) {
         case 0:
-          return 'Xác Thực Văn Bằng Số';
+          return 'Tra Cứu & Xác Thực Văn Bằng';
         case 1:
-          return 'Sổ Tay & Lịch Sử (Offline)';
+          return 'Sổ Tay & Lịch Sử Đã Lưu';
         case 2:
-          return 'Ký Số & Cấp Phát Bằng';
+          return 'Cấp Phát Văn Bằng Mới';
         case 3:
-          return 'Cài Đặt & Kết Nối';
+          return 'Cài Đặt Ứng Dụng';
         default:
           return 'Xác Thực Văn Bằng';
       }
     } else {
       switch (index) {
         case 0:
-          return 'Xác Thực Văn Bằng Số';
+          return 'Tra Cứu & Xác Thực Văn Bằng';
         case 1:
-          return 'Sổ Tay & Lịch Sử (Offline)';
+          return 'Sổ Tay & Lịch Sử Đã Lưu';
         case 2:
-          return 'Cài Đặt & Kết Nối';
+          return 'Cài Đặt Ứng Dụng';
         default:
           return 'Xác Thực Văn Bằng';
       }

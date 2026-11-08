@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +11,10 @@ import 'user_service.dart';
 /// Hỗ trợ đăng nhập Email/Password, Google Sign-In và bộ đệm Fallback Offline
 class AuthService {
   FirebaseAuth? _auth;
-  final GoogleSignIn _googleSignIn = GoogleSignIn(scopes: ['email', 'profile']);
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: '460606007905-3h0e26dgjqpg7g6ut2br6b9ouhcqeoqa.apps.googleusercontent.com',
+    scopes: ['email', 'profile'],
+  );
   final UserService _userService;
 
   AuthService({UserService? userService})
@@ -43,7 +47,17 @@ class AuthService {
     required String role,
     String organization = '',
     String studentCode = '',
+    String? staffPasscode,
   }) async {
+    // Bảo vệ ví hệ thống: Kiểm tra Mã ủy quyền Cán bộ qua SHA-256 & Firebase Realtime Database (/system_config)
+    if (role == UserRole.staff) {
+      final isValidPasscode =
+          await _userService.verifyStaffPasscode(staffPasscode);
+      if (!isValidPasscode) {
+        throw 'Mã ủy quyền Cán bộ không chính xác! Vui lòng liên hệ Quản trị viên để được cấp quyền.';
+      }
+    }
+
     final now = DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now());
 
     if (_auth != null) {
@@ -158,9 +172,11 @@ class AuthService {
   Future<UserModel> signInWithGoogle() async {
     if (_auth != null && !kIsWeb) {
       try {
+        // Đảm bảo bảng chọn tài khoản Google luôn hiển thị để người dùng chủ động chọn
+        await _googleSignIn.signOut();
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         if (googleUser == null) {
-          throw 'Người dùng đã hủy thao tác đăng nhập Google';
+          throw 'Bạn đã hủy thao tác chọn tài khoản Google.';
         }
 
         final GoogleSignInAuthentication googleAuth =
@@ -176,12 +192,12 @@ class AuthService {
 
         var profile = await _userService.getUserProfile(uid);
         if (profile == null) {
-          // Lần đầu đăng nhập Google: Tự động gán vai trò Sinh viên mặc định
+          // Lần đầu đăng nhập Google: Tự động gán vai trò Sinh viên mặc định với thông tin Google thật
           profile = UserModel(
             uid: uid,
             name: user.displayName ?? googleUser.displayName ?? 'Người dùng Google',
             email: user.email ?? googleUser.email,
-            avatarBase64OrUrl: user.photoURL,
+            avatarBase64OrUrl: user.photoURL ?? googleUser.photoUrl,
             role: UserRole.student,
             createdAt: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
           );
@@ -190,18 +206,102 @@ class AuthService {
         return profile;
       } on FirebaseAuthException catch (e) {
         throw getAuthErrorMessage(e);
+      } on PlatformException catch (e) {
+        final details = '${e.code} ${e.message ?? ''}';
+        if (details.contains('sign_in_canceled') || details.contains('12501')) {
+          throw 'Bạn đã hủy thao tác chọn tài khoản Google.';
+        }
+        if (details.contains('ApiException: 10') ||
+            details.contains('12500') ||
+            details.contains('DEVELOPER_ERROR')) {
+          throw 'Chưa bật Google Sign-In hoặc thiếu mã SHA-1 trên Firebase Console (Project Settings -> Add fingerprint).';
+        }
+        throw 'Lỗi đăng nhập Google (${e.code}): ${e.message ?? 'Vui lòng thử lại.'}';
       } catch (e) {
-        debugPrint('[Google Sign-In] Chuyển fallback demo Google: $e');
-        return _getDemoUser('google_user@gmail.com');
+        if (e is String) rethrow;
+        throw 'Không thể đăng nhập bằng Google: $e';
       }
     } else {
-      // Môi trường Web/Desktop hoặc Fallback
-      return _getDemoUser('google_demo@gmail.com');
+      throw 'Chức năng Đăng nhập Google yêu cầu kết nối Firebase trên thiết bị di động.';
     }
   }
 
   // ========================================================
-  // 4. ĐĂNG XUẤT (Sign Out)
+  // 4. QUÊN / ĐẶT LẠI MẬT KHẨU (Password Reset)
+  // ========================================================
+  Future<void> sendPasswordResetEmail(String email) async {
+    final cleanEmail = email.trim().toLowerCase();
+    if (cleanEmail.isEmpty) {
+      throw 'Vui lòng nhập địa chỉ email.';
+    }
+
+    if (_isDemoAccount(cleanEmail)) {
+      throw 'Đây là tài khoản mẫu chấm thi, mật khẩu cố định là: 123456';
+    }
+
+    if (_auth != null) {
+      try {
+        await _auth!.sendPasswordResetEmail(email: cleanEmail);
+      } on FirebaseAuthException catch (e) {
+        throw getAuthErrorMessage(e);
+      } catch (e) {
+        throw 'Không thể gửi email đặt lại mật khẩu: $e';
+      }
+    } else {
+      throw 'Dịch vụ xác thực Firebase chưa sẵn sàng. Vui lòng thử lại sau.';
+    }
+  }
+
+  // ========================================================
+  // 5. XÓA VĨNH VIỄN TÀI KHOẢN (Delete Account)
+  // Xóa 3 tầng: Firebase Realtime Database + SharedPreferences + Firebase Auth
+  // ========================================================
+  Future<void> deleteAccount(String uid) async {
+    // 1. Xóa hồ sơ trong Realtime Database và SharedPreferences
+    await _userService.deleteUserProfile(uid);
+
+    // 2. Nếu là tài khoản Firebase Auth thật thì tiến hành xóa user trên Auth
+    if (_auth != null && _auth!.currentUser != null) {
+      final user = _auth!.currentUser!;
+      try {
+        await user.delete();
+      } on FirebaseAuthException catch (e) {
+        if (e.code == 'requires-recent-login') {
+          // Phiên đăng nhập quá cũ, thử reauthenticate nếu là tài khoản Google
+          try {
+            final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+            if (googleUser != null) {
+              final googleAuth = await googleUser.authentication;
+              final credential = GoogleAuthProvider.credential(
+                accessToken: googleAuth.accessToken,
+                idToken: googleAuth.idToken,
+              );
+              await user.reauthenticateWithCredential(credential);
+              await user.delete();
+            } else {
+              throw 'Vui lòng đăng xuất và đăng nhập lại để xác thực quyền xóa tài khoản.';
+            }
+          } catch (_) {
+            throw 'Vì lý do bảo mật, vui lòng đăng xuất và đăng nhập lại trước khi thực hiện thao tác xóa.';
+          }
+        } else {
+          throw getAuthErrorMessage(e);
+        }
+      } catch (e) {
+        throw 'Lỗi xóa tài khoản: $e';
+      }
+    }
+
+    // 3. Ngắt kết nối Google Sign-In nếu có
+    try {
+      if (await _googleSignIn.isSignedIn()) {
+        await _googleSignIn.signOut();
+      }
+    } catch (_) {}
+  }
+
+  // ========================================================
+  // 6. ĐĂNG XUẤT (Sign Out)
   // ========================================================
   Future<void> signOut() async {
     try {
@@ -217,7 +317,7 @@ class AuthService {
   }
 
   // ========================================================
-  // 5. DỊCH MÃ LỖI FIREBASE SANG TIẾNG VIỆT THÂN THIỆN
+  // 7. DỊCH MÃ LỖI FIREBASE SANG TIẾNG VIỆT THÂN THIỆN
   // ========================================================
   static String getAuthErrorMessage(dynamic error) {
     if (error is FirebaseAuthException) {

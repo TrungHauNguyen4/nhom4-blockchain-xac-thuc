@@ -25,6 +25,13 @@ const apiLimiter = rateLimit({
     message: { error: 'Quá nhiều yêu cầu, vui lòng thử lại sau 1 phút' }
 });
 
+// Giới hạn tần suất ký số để bảo vệ ví Faucet ETH chống spam rút cạn ví
+const notarizeLimiter = rateLimit({
+    windowMs: 1 * 60 * 1000,
+    max: 6, // Tối đa 6 lần ký số / phút
+    message: { error: 'Thao tác ký số quá nhanh! Vui lòng chờ 1 phút trước khi ký tiếp để bảo vệ ví hệ thống.' }
+});
+
 const checkApiKey = (req, res, next) => {
     const apiKey = req.headers['x-api-key'];
     if (!apiKey || apiKey !== process.env.API_KEY) {
@@ -72,7 +79,7 @@ app.get('/health', (req, res) => {
 // API 1: LƯU TRỮ LÊN BLOCKCHAIN TỪ CLIENT-SIDE HASH (NOTARIZE)
 // Mobile/Web tự băm Keccak256 trên RAM -> gửi Hash lên
 // ========================================================
-app.post('/api/v1/notarize', apiLimiter, checkApiKey, async (req, res) => {
+app.post('/api/v1/notarize', notarizeLimiter, checkApiKey, async (req, res) => {
     try {
         const {
             dataHash,
@@ -90,6 +97,44 @@ app.post('/api/v1/notarize', apiLimiter, checkApiKey, async (req, res) => {
         }
 
         console.log(`\n[Notarize] Nhận yêu cầu ký số cho Hash: ${dataHash}`);
+
+        // BƯỚC BẢO VỆ VÍ (ANTI-DRAIN GAS): Kiểm tra miễn phí (0 Gas) trước khi gửi transaction
+        // 1. Kiểm tra trong CSDL SQL Server trước
+        const existingDB = await getNotaryByHash(dataHash);
+        if (existingDB) {
+            console.log(`[Anti-Drain] Bỏ qua gửi transaction: Hash ${dataHash} đã có trong CSDL (Tx: ${existingDB.txHash})`);
+            return res.status(200).json({
+                success: true,
+                message: 'Văn bằng này đã được niêm phong hợp lệ từ trước (Đã bảo vệ ví, không tiêu tốn thêm Gas)!',
+                transactionHash: existingDB.txHash,
+                blockNumber: existingDB.blockNumber,
+                signerUsed: existingDB.signer,
+                data: existingDB
+            });
+        }
+
+        // 2. Kiểm tra trực tiếp trên Smart Contract bằng eth_call (View function - Hoàn toàn 0 Gas)
+        try {
+            const onChainRecord = await contract.getRecord(dataHash);
+            if (onChainRecord && onChainRecord.timestamp && Number(onChainRecord.timestamp) > 0) {
+                console.log(`[Anti-Drain] Bỏ qua gửi transaction: Hash ${dataHash} đã tồn tại On-Chain tại thời điểm ${onChainRecord.timestamp}`);
+                return res.status(200).json({
+                    success: true,
+                    message: 'Văn bằng này đã tồn tại trên Smart Contract Sepolia từ trước (Tiết kiệm 100% phí Gas)!',
+                    transactionHash: 'On-chain Verified',
+                    signerUsed: onChainRecord.signer,
+                    data: {
+                        dataHash,
+                        fileName: fileName || 'Văn bằng chứng chỉ',
+                        fileType: fileType || 'PDF',
+                        signer: onChainRecord.signer,
+                        timestamp: Number(onChainRecord.timestamp)
+                    }
+                });
+            }
+        } catch (_) {
+            // Không tìm thấy trên chain là bình thường đối với văn bằng mới, tiếp tục ký
+        }
 
         // 1. Hệ thống tự động tạo chữ ký ECDSA từ ví Master
         const signature = await masterWallet.signMessage(ethers.getBytes(dataHash));

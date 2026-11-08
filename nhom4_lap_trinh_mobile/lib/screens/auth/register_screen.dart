@@ -19,6 +19,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _confirmPasswordController = TextEditingController();
   final _orgController = TextEditingController();
   final _studentCodeController = TextEditingController();
+  final _staffPasscodeController = TextEditingController();
 
   String _selectedRole = UserRole.student;
   bool _obscurePassword = true;
@@ -31,6 +32,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _confirmPasswordController.dispose();
     _orgController.dispose();
     _studentCodeController.dispose();
+    _staffPasscodeController.dispose();
     super.dispose();
   }
 
@@ -47,6 +49,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
       studentCode: _selectedRole == UserRole.student
           ? _studentCodeController.text.trim()
           : '',
+      staffPasscode: _selectedRole == UserRole.staff
+          ? _staffPasscodeController.text.trim()
+          : null,
     );
 
     if (!mounted) return;
@@ -252,6 +257,64 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 const SizedBox(height: 12),
 
                 // Thông tin đặc thù theo vai trò
+                if (_selectedRole == UserRole.staff) ...[
+                  Card(
+                    color: Colors.amber.withValues(alpha: 0.12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      side: const BorderSide(color: Colors.amber, width: 1.2),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.all(12.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.shield_outlined, color: Colors.amber, size: 20),
+                              SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Bảo Mật Quyền Cán Bộ (Chống Cạn Ví ETH)',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 12.5,
+                                    color: Colors.amber,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          const Text(
+                            'Cán bộ đào tạo có quyền ký số và tiêu tốn phí Gas trên Blockchain Sepolia. Vui lòng nhập mã ủy quyền bí mật của nhà trường.',
+                            style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                          ),
+                          const SizedBox(height: 10),
+                          TextFormField(
+                            controller: _staffPasscodeController,
+                            decoration: const InputDecoration(
+                              labelText: 'Mã ủy quyền Cán bộ nhà trường *',
+                              hintText: 'Nhập mã do Quản trị viên cấp',
+                              prefixIcon: Icon(Icons.key_outlined),
+                              border: OutlineInputBorder(),
+                              filled: true,
+                            ),
+                            validator: (val) {
+                              if (_selectedRole == UserRole.staff &&
+                                  (val == null || val.trim().isEmpty)) {
+                                return 'Vui lòng nhập mã ủy quyền Cán bộ';
+                              }
+                              return null;
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
                 if (_selectedRole == UserRole.student) ...[
                   TextFormField(
                     controller: _studentCodeController,

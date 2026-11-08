@@ -85,7 +85,7 @@ class _VerifyTabState extends State<VerifyTab> {
     }
   }
 
-  // [THAO TÁC 2]: Chọn nhanh Ảnh chứng chỉ từ Thư viện ảnh -> Băm trên RAM & Verify
+  // [THAO TÁC 2]: Chọn nhanh Ảnh chứng chỉ từ Thư viện ảnh -> Đọc nguyên vẹn byte gốc & Verify
   Future<void> _pickImageCertificate() async {
     try {
       final XFile? picked = await _imagePicker.pickImage(
@@ -93,7 +93,9 @@ class _VerifyTabState extends State<VerifyTab> {
       );
       if (picked == null) return;
 
-      final bytes = await picked.readAsBytes();
+      final Uint8List bytes = (!kIsWeb && picked.path.isNotEmpty)
+          ? await File(picked.path).readAsBytes()
+          : await picked.readAsBytes();
       if (!mounted) return;
       _processBytesVerification(bytes, picked.name);
     } catch (e) {
@@ -164,7 +166,7 @@ class _VerifyTabState extends State<VerifyTab> {
     final clean = hash.trim();
     if (clean.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vui lòng nhập mã Data Hash (0x...) để tra cứu')),
+        const SnackBar(content: Text('Vui lòng nhập mã số văn bằng (0x...) để tra cứu')),
       );
       return;
     }
@@ -187,27 +189,34 @@ class _VerifyTabState extends State<VerifyTab> {
     });
   }
 
-  // Bọc luồng verifyFileStream kèm đối chiếu Offline Sqflite nếu mất kết nối Server
+  // Bọc luồng verifyFileStream kèm đối chiếu Sổ tay lưu trên máy (kiểm tra cả Keccak-256 & SHA-256)
   Stream<VerificationProgress> _verifyFileWithOfflineFallback({
     required Uint8List fileBytes,
     required String fileName,
   }) async* {
+    final keccakHash = HashService.keccak256FromBytes(fileBytes);
+    final sha256Hash = HashService.sha256FromBytes(fileBytes);
+
     await for (final progress in HashService.verifyFileStream(
       fileBytes: fileBytes,
       fileName: fileName,
       apiService: _apiService,
     )) {
-      if (progress.step == VerificationStep.error && progress.hash != null) {
-        CertificateRecord? offlineCert; try { offlineCert = await DatabaseService.instance.getCertificateByHash(
-          progress.hash!,
-        ); } catch (_) {}
+      if (progress.step == VerificationStep.error ||
+          progress.step == VerificationStep.verifiedInvalid) {
+        CertificateRecord? offlineCert;
+        try {
+          offlineCert =
+              await DatabaseService.instance.getCertificateByHash(keccakHash);
+          offlineCert ??=
+              await DatabaseService.instance.getCertificateByHash(sha256Hash);
+        } catch (_) {}
         if (offlineCert != null && offlineCert.isValid) {
           yield VerificationProgress(
             step: VerificationStep.verifiedValid,
             progress: 1.0,
-            statusMessage:
-                'Xác thực thành công từ Sổ tay Offline (Chế độ không có mạng)!',
-            hash: progress.hash,
+            statusMessage: 'Xác thực thành công từ Sổ tay lưu trên máy!',
+            hash: offlineCert.dataHash,
             record: offlineCert,
           );
           return;
@@ -217,7 +226,7 @@ class _VerifyTabState extends State<VerifyTab> {
     }
   }
 
-  // Bọc luồng verifyHashStream kèm đối chiếu Offline Sqflite nếu mất kết nối Server
+  // Bọc luồng verifyHashStream kèm đối chiếu Sổ tay lưu trên máy
   Stream<VerificationProgress> _verifyHashWithOfflineFallback({
     required String dataHash,
     required String fileName,
@@ -227,16 +236,18 @@ class _VerifyTabState extends State<VerifyTab> {
       apiService: _apiService,
       fileName: fileName,
     )) {
-      if (progress.step == VerificationStep.error) {
-        CertificateRecord? offlineCert; try { offlineCert = await DatabaseService.instance.getCertificateByHash(
-          dataHash,
-        ); } catch (_) {}
+      if (progress.step == VerificationStep.error ||
+          progress.step == VerificationStep.verifiedInvalid) {
+        CertificateRecord? offlineCert;
+        try {
+          offlineCert =
+              await DatabaseService.instance.getCertificateByHash(dataHash);
+        } catch (_) {}
         if (offlineCert != null && offlineCert.isValid) {
           yield VerificationProgress(
             step: VerificationStep.verifiedValid,
             progress: 1.0,
-            statusMessage:
-                'Xác thực thành công từ Sổ tay Offline (Chế độ không có mạng)!',
+            statusMessage: 'Xác thực thành công từ Sổ tay lưu trên máy!',
             hash: dataHash,
             record: offlineCert,
           );
@@ -321,18 +332,28 @@ class _VerifyTabState extends State<VerifyTab> {
           _buildActionButtons(context),
           const SizedBox(height: 16),
           _buildManualHashCard(context),
-          if (_selectedFileName != null) ...[
-            const SizedBox(height: 16),
-            _buildClientRamHashInfoCard(context),
-          ],
-          if (_verificationStream != null) ...[
-            const SizedBox(height: 16),
-            ProgressStreamCard(
-              stream: _verificationStream!,
-              onCompleted: _recordScanHistoryOnDone,
-              onViewDetail: _openDetailScreen,
+          AnimatedSize(
+            duration: const Duration(milliseconds: 260),
+            curve: Curves.easeOutCubic,
+            alignment: Alignment.topCenter,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                if (_selectedFileName != null) ...[
+                  const SizedBox(height: 16),
+                  _buildClientRamHashInfoCard(context),
+                ],
+                if (_verificationStream != null) ...[
+                  const SizedBox(height: 16),
+                  ProgressStreamCard(
+                    stream: _verificationStream!,
+                    onCompleted: _recordScanHistoryOnDone,
+                    onViewDetail: _openDetailScreen,
+                  ),
+                ],
+              ],
             ),
-          ],
+          ),
         ],
       ),
     );
@@ -390,12 +411,12 @@ class _VerifyTabState extends State<VerifyTab> {
                             ),
                             const SizedBox(height: 10),
                             const Text(
-                              'Sẵn sàng thẩm định văn bằng',
+                              'Sẵn sàng kiểm tra văn bằng',
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                             const SizedBox(height: 4),
                             const Text(
-                              'Chọn Quét mã QR, Chọn File PDF/Ảnh hoặc nhập mã Hash ở cột bên trái để bắt đầu luồng StreamBuilder.',
+                              'Chọn Quét mã QR, Chọn File PDF/Ảnh hoặc nhập mã số văn bằng ở cột bên trái để bắt đầu kiểm tra.',
                               textAlign: TextAlign.center,
                               style: TextStyle(fontSize: 12, color: Colors.grey),
                             ),
@@ -414,16 +435,32 @@ class _VerifyTabState extends State<VerifyTab> {
 
   // Banner giới thiệu (Bọc FittedBox chống tràn viền)
   Widget _buildBanner(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [
-            Theme.of(context).colorScheme.primary,
-            Theme.of(context).colorScheme.secondary,
-          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: isDark
+              ? const [Color(0xFF1E293B), Color(0xFF0F172A)]
+              : [
+                  Theme.of(context).colorScheme.primary,
+                  const Color(0xFF0D9488),
+                ],
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: Colors.white.withValues(alpha: isDark ? 0.16 : 0.25),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.28 : 0.10),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,10 +469,10 @@ class _VerifyTabState extends State<VerifyTab> {
             fit: BoxFit.scaleDown,
             child: Row(
               children: [
-                Icon(Icons.security, color: Colors.white, size: 22),
+                Icon(Icons.verified_user_rounded, color: Colors.white, size: 22),
                 SizedBox(width: 8),
                 Text(
-                  'Kiểm Định Văn Bằng & Chứng Chỉ Số Blockchain',
+                  'Tra Cứu & Xác Thực Văn Bằng Điện Tử',
                   style: TextStyle(
                     color: Colors.white,
                     fontSize: 17,
@@ -447,7 +484,7 @@ class _VerifyTabState extends State<VerifyTab> {
           ),
           SizedBox(height: 6),
           Text(
-            'Băm mật mã Keccak-256 / SHA-256 trực tiếp trên RAM thiết bị & đối soát Smart Contract Ethereum Sepolia',
+            'Kiểm tra bằng cấp, chứng chỉ thật hay giả nhanh chóng bằng mã QR hoặc ảnh chụp',
             style: TextStyle(color: Colors.white70, fontSize: 12.5),
           ),
         ],
@@ -471,7 +508,7 @@ class _VerifyTabState extends State<VerifyTab> {
                 ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: _scanQrCode,
               ),
@@ -486,7 +523,7 @@ class _VerifyTabState extends State<VerifyTab> {
                 ),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
                 ),
                 onPressed: _pickAndVerifyFile,
               ),
@@ -498,11 +535,11 @@ class _VerifyTabState extends State<VerifyTab> {
           icon: const Icon(Icons.photo_library_outlined, size: 20),
           label: const FittedBox(
             fit: BoxFit.scaleDown,
-            child: Text('Chọn Ảnh Văn Bằng từ Thư viện (Băm trên RAM)'),
+            child: Text('Chọn ảnh văn bằng từ máy'),
           ),
           style: OutlinedButton.styleFrom(
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           ),
           onPressed: _pickImageCertificate,
         ),
@@ -514,12 +551,12 @@ class _VerifyTabState extends State<VerifyTab> {
   Widget _buildManualHashCard(BuildContext context) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(14.0),
+        padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Tra cứu bằng mã Data Hash (bytes32):',
+              'Tra cứu bằng mã số văn bằng:',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
@@ -527,9 +564,9 @@ class _VerifyTabState extends State<VerifyTab> {
               controller: _hashInputController,
               onSubmitted: (val) => _startVerifyHash(val),
               decoration: InputDecoration(
-                hintText: '0x...',
+                hintText: 'Nhập hoặc dán mã văn bằng (0x...)',
                 isDense: true,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                 suffixIcon: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -558,7 +595,7 @@ class _VerifyTabState extends State<VerifyTab> {
     );
   }
 
-  // Thẻ hiển thị kết quả băm Client-side trên RAM (Keccak-256 & SHA-256)
+  // Thẻ hiển thị tệp đang kiểm tra
   Widget _buildClientRamHashInfoCard(BuildContext context) {
     final kb = ((_selectedFileSize ?? 0) / 1024).toStringAsFixed(1);
     return Card(
@@ -569,11 +606,11 @@ class _VerifyTabState extends State<VerifyTab> {
           children: [
             Row(
               children: [
-                const Icon(Icons.memory, size: 18, color: Colors.teal),
+                const Icon(Icons.description_outlined, size: 18, color: Colors.teal),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    'Đã băm trên RAM: $_selectedFileName ($kb KB)',
+                    'Tệp đang kiểm tra: $_selectedFileName ($kb KB)',
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
@@ -584,7 +621,7 @@ class _VerifyTabState extends State<VerifyTab> {
             if (_computedKeccak256 != null) ...[
               const SizedBox(height: 6),
               Text(
-                '• Keccak-256: $_computedKeccak256',
+                '• Mã nhận diện: $_computedKeccak256',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, fontFamily: 'monospace'),
@@ -593,7 +630,7 @@ class _VerifyTabState extends State<VerifyTab> {
             if (_computedSha256 != null) ...[
               const SizedBox(height: 2),
               Text(
-                '• SHA-256: $_computedSha256',
+                '• Mã phụ trợ: $_computedSha256',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 11, fontFamily: 'monospace', color: Colors.grey),
