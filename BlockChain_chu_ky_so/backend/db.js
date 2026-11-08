@@ -15,11 +15,30 @@ const dbConfig = {
 
 let poolPromise;
 
-// Tự động kiểm tra và thêm các cột còn thiếu trong bảng NotaryHistory (Zero-config migration)
+// Tự động kiểm tra tạo bảng (nếu chưa có) và thêm các cột còn thiếu trong bảng NotaryHistory (Zero-config migration)
 const ensureTableSchema = async (pool) => {
     try {
         const query = `
-            IF OBJECT_ID('dbo.NotaryHistory', 'U') IS NOT NULL
+            IF OBJECT_ID('dbo.NotaryHistory', 'U') IS NULL
+            BEGIN
+                CREATE TABLE dbo.NotaryHistory (
+                    Id INT IDENTITY(1,1) PRIMARY KEY,
+                    FileName NVARCHAR(255) NOT NULL,
+                    FileType VARCHAR(20) DEFAULT 'PDF',
+                    DataHash VARCHAR(66) NOT NULL UNIQUE,
+                    TxHash VARCHAR(66) NOT NULL,
+                    BlockNumber INT NULL,
+                    Signer VARCHAR(42) NOT NULL,
+                    StudentName NVARCHAR(150) NULL,
+                    StudentCode VARCHAR(50) NULL,
+                    DegreeName NVARCHAR(255) NULL,
+                    IssuerName NVARCHAR(255) DEFAULT N'Phòng Đào Tạo',
+                    CreatedByEmail VARCHAR(150) NULL,
+                    PreviewUrl NVARCHAR(500) NULL,
+                    CreatedAt DATETIME DEFAULT GETDATE()
+                );
+            END
+            ELSE
             BEGIN
                 IF COL_LENGTH('dbo.NotaryHistory', 'FileType') IS NULL ALTER TABLE dbo.NotaryHistory ADD FileType VARCHAR(20) DEFAULT 'PDF';
                 IF COL_LENGTH('dbo.NotaryHistory', 'BlockNumber') IS NULL ALTER TABLE dbo.NotaryHistory ADD BlockNumber INT NULL;
@@ -28,6 +47,8 @@ const ensureTableSchema = async (pool) => {
                 IF COL_LENGTH('dbo.NotaryHistory', 'DegreeName') IS NULL ALTER TABLE dbo.NotaryHistory ADD DegreeName NVARCHAR(255) NULL;
                 IF COL_LENGTH('dbo.NotaryHistory', 'IssuerName') IS NULL ALTER TABLE dbo.NotaryHistory ADD IssuerName NVARCHAR(255) DEFAULT N'Phòng Đào Tạo';
                 IF COL_LENGTH('dbo.NotaryHistory', 'CreatedByEmail') IS NULL ALTER TABLE dbo.NotaryHistory ADD CreatedByEmail VARCHAR(150) NULL;
+                IF COL_LENGTH('dbo.NotaryHistory', 'PreviewUrl') IS NULL ALTER TABLE dbo.NotaryHistory ADD PreviewUrl NVARCHAR(500) NULL;
+                IF COL_LENGTH('dbo.NotaryHistory', 'CreatedAt') IS NULL ALTER TABLE dbo.NotaryHistory ADD CreatedAt DATETIME DEFAULT GETDATE();
             END
         `;
         await pool.request().query(query);
@@ -85,15 +106,16 @@ export const insertNotaryHistory = async (params, maybeDataHash, maybeTxHash, ma
         request.input('DegreeName', sql.NVarChar(255), p.degreeName || null);
         request.input('IssuerName', sql.NVarChar(255), p.issuerName || 'Phòng Đào Tạo');
         request.input('CreatedByEmail', sql.VarChar(150), p.createdByEmail || null);
+        request.input('PreviewUrl', sql.NVarChar(500), p.previewUrl || null);
 
         const result = await request.query(`
             INSERT INTO NotaryHistory (
                 FileName, FileType, DataHash, TxHash, BlockNumber, Signer,
-                StudentName, StudentCode, DegreeName, IssuerName, CreatedByEmail
+                StudentName, StudentCode, DegreeName, IssuerName, CreatedByEmail, PreviewUrl
             )
             VALUES (
                 @FileName, @FileType, @DataHash, @TxHash, @BlockNumber, @Signer,
-                @StudentName, @StudentCode, @DegreeName, @IssuerName, @CreatedByEmail
+                @StudentName, @StudentCode, @DegreeName, @IssuerName, @CreatedByEmail, @PreviewUrl
             )
         `);
 

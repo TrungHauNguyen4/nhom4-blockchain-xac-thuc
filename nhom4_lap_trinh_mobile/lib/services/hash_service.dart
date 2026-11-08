@@ -5,6 +5,13 @@ import 'package:crypto/crypto.dart' as crypto_pkg;
 import '../models/certificate_record.dart';
 import 'api_service.dart';
 
+/// Tùy chọn thuật toán băm trên RAM máy khách (Client-side Hashing)
+/// Mặc định dùng `keccak256` để khớp 100% với `ethers.keccak256` trên Ethereum Sepolia.
+enum HashAlgorithm {
+  keccak256,
+  sha256,
+}
+
 enum VerificationStep {
   readingFile,
   hashing,
@@ -62,13 +69,14 @@ class NotarizationProgress {
 
 class HashService {
   // ========================================================
-  // 1. THUẬT TOÁN BĂM KECCAK-256 (Chuẩn Ethereum)
+  // 1. THUẬT TOÁN BĂM KECCAK-256 (Chuẩn Ethereum - Mặc định)
   // Khớp 100% với ethers.keccak256 trên Web & Smart Contract
   // ========================================================
   static String keccak256FromBytes(Uint8List bytes) {
     final digest = KeccakDigest(256);
     final output = digest.process(bytes);
-    final hexString = output.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    final hexString =
+        output.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     return '0x$hexString';
   }
 
@@ -77,7 +85,7 @@ class HashService {
   }
 
   // ========================================================
-  // 2. THUẬT TOÁN BĂM SHA-256 (Theo yêu cầu đề tài)
+  // 2. THUẬT TOÁN BĂM SHA-256 (Tùy chọn theo yêu cầu đề tài)
   // Tính toán trực tiếp trên RAM máy khách
   // ========================================================
   static String sha256FromBytes(Uint8List bytes) {
@@ -89,43 +97,74 @@ class HashService {
     return sha256FromBytes(Uint8List.fromList(utf8.encode(text)));
   }
 
+  // Hàm băm linh hoạt theo thuật toán được chọn (Keccak-256 hoặc SHA-256)
+  static String computeHashFromBytes(
+    Uint8List bytes, {
+    HashAlgorithm algorithm = HashAlgorithm.keccak256,
+  }) {
+    switch (algorithm) {
+      case HashAlgorithm.sha256:
+        return sha256FromBytes(bytes);
+      case HashAlgorithm.keccak256:
+        return keccak256FromBytes(bytes);
+    }
+  }
+
   // ========================================================
   // 3. TIẾN TRÌNH XÁC MINH FILE THỜI GIAN THỰC (StreamBuilder async*/yield)
-  // Đọc RAM -> Băm Keccak256 -> Gọi REST API -> Trả kết quả
+  // Đọc RAM -> Băm Keccak256/SHA256 -> Gọi REST API -> Trả kết quả
   // ========================================================
   static Stream<VerificationProgress> verifyFileStream({
     required Uint8List fileBytes,
     required String fileName,
     required ApiService apiService,
+    HashAlgorithm algorithm = HashAlgorithm.keccak256,
   }) async* {
     String? currentHash;
     try {
-      // Giai đoạn 1: Nạp file vào RAM
+      // Giai đoạn 1: Đọc tệp
       yield VerificationProgress(
         step: VerificationStep.readingFile,
         progress: 0.25,
-        statusMessage: 'Đang nạp file vào bộ nhớ RAM...',
+        statusMessage: 'Đang đọc tệp văn bằng trên điện thoại...',
       );
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Giai đoạn 2: Tính toán mã băm Keccak-256 an toàn
+      // Giai đoạn 2: Tạo mã nhận diện tài liệu (Tính đồng thời cả Keccak-256 & SHA-256)
       yield VerificationProgress(
         step: VerificationStep.hashing,
         progress: 0.50,
-        statusMessage: 'Đang băm mật mã Keccak-256 trên thiết bị...',
+        statusMessage: 'Đang tạo mã nhận diện văn bằng...',
       );
-      currentHash = keccak256FromBytes(fileBytes);
+      final primaryHash = computeHashFromBytes(fileBytes, algorithm: algorithm);
+      final fallbackAlgo = algorithm == HashAlgorithm.keccak256
+          ? HashAlgorithm.sha256
+          : HashAlgorithm.keccak256;
+      final secondaryHash =
+          computeHashFromBytes(fileBytes, algorithm: fallbackAlgo);
+      currentHash = primaryHash;
       await Future.delayed(const Duration(milliseconds: 400));
 
-      // Giai đoạn 3: Đối soát với Sổ cái Blockchain qua REST API
+      // Giai đoạn 3: Đối chiếu với sổ gốc (Tự động kiểm tra cả chuẩn Tiêu chuẩn & Nâng cao)
       yield VerificationProgress(
         step: VerificationStep.queryingBlockchain,
         progress: 0.75,
-        statusMessage: 'Đang đối soát Smart Contract mạng Sepolia & CSDL...',
+        statusMessage: 'Đang đối chiếu với hệ thống sổ gốc...',
         hash: currentHash,
       );
 
-      final record = await apiService.verifyHash(currentHash, fileName: fileName);
+      CertificateRecord? record =
+          await apiService.verifyHash(primaryHash, fileName: fileName);
+
+      // Nếu không khớp ở thuật toán đầu tiên, tự động đối chiếu tiếp thuật toán thứ hai (SHA-256 <-> Keccak-256)
+      if (record == null || !record.isValid) {
+        final secondRecord =
+            await apiService.verifyHash(secondaryHash, fileName: fileName);
+        if (secondRecord != null && secondRecord.isValid) {
+          record = secondRecord;
+          currentHash = secondaryHash;
+        }
+      }
       await Future.delayed(const Duration(milliseconds: 300));
 
       // Giai đoạn 4: Hoàn tất
@@ -133,7 +172,7 @@ class HashService {
         yield VerificationProgress(
           step: VerificationStep.verifiedValid,
           progress: 1.0,
-          statusMessage: 'Xác thực thành công! Văn bằng chính chủ.',
+          statusMessage: 'Xác thực thành công! Văn bằng hợp lệ.',
           hash: currentHash,
           record: record,
         );
@@ -141,7 +180,8 @@ class HashService {
         yield VerificationProgress(
           step: VerificationStep.verifiedInvalid,
           progress: 1.0,
-          statusMessage: 'Cảnh báo: Văn bằng chưa từng được niêm phong hoặc đã bị chỉnh sửa!',
+          statusMessage:
+              'Cảnh báo: Văn bằng chưa được cấp hoặc tệp đã bị chỉnh sửa!',
           hash: currentHash,
         );
       }
@@ -150,7 +190,7 @@ class HashService {
       yield VerificationProgress(
         step: VerificationStep.error,
         progress: 1.0,
-        statusMessage: 'Lỗi trong quá trình kiểm định',
+        statusMessage: 'Lỗi trong quá trình kiểm tra',
         hash: currentHash,
         errorMessage: e.toString(),
       );
@@ -169,7 +209,7 @@ class HashService {
       yield VerificationProgress(
         step: VerificationStep.hashing,
         progress: 0.40,
-        statusMessage: 'Đang chuẩn hóa định dạng mã Hash...',
+        statusMessage: 'Đang kiểm tra định dạng mã văn bằng...',
         hash: dataHash,
       );
       await Future.delayed(const Duration(milliseconds: 300));
@@ -177,7 +217,7 @@ class HashService {
       yield VerificationProgress(
         step: VerificationStep.queryingBlockchain,
         progress: 0.75,
-        statusMessage: 'Đang đối soát Sổ cái Blockchain qua REST API...',
+        statusMessage: 'Đang đối chiếu với hệ thống sổ gốc...',
         hash: dataHash,
       );
 
@@ -188,7 +228,7 @@ class HashService {
         yield VerificationProgress(
           step: VerificationStep.verifiedValid,
           progress: 1.0,
-          statusMessage: 'Xác thực thành công! Văn bằng chính chủ.',
+          statusMessage: 'Xác thực thành công! Văn bằng hợp lệ.',
           hash: dataHash,
           record: record,
         );
@@ -196,7 +236,7 @@ class HashService {
         yield VerificationProgress(
           step: VerificationStep.verifiedInvalid,
           progress: 1.0,
-          statusMessage: 'Không tìm thấy chứng chỉ tương ứng trên Blockchain!',
+          statusMessage: 'Không tìm thấy văn bằng này trên hệ thống sổ gốc!',
           hash: dataHash,
         );
       }
@@ -205,7 +245,7 @@ class HashService {
       yield VerificationProgress(
         step: VerificationStep.error,
         progress: 1.0,
-        statusMessage: 'Không thể kết nối đến máy chủ Blockchain',
+        statusMessage: 'Không thể kết nối đến hệ thống xác thực',
         errorMessage: e.toString(),
       );
     }
@@ -225,31 +265,32 @@ class HashService {
     String? degreeName,
     String? issuerName,
     String? createdByEmail,
+    HashAlgorithm algorithm = HashAlgorithm.keccak256,
   }) async* {
     String? currentHash;
     try {
-      // Giai đoạn 1: Đọc nhị phân vào RAM
+      // Giai đoạn 1: Đọc tệp
       yield NotarizationProgress(
         step: NotarizationStep.readingFile,
         progress: 0.25,
-        statusMessage: 'Đang tải file vào bộ nhớ RAM thiết bị...',
+        statusMessage: 'Đang đọc tệp văn bằng trên điện thoại...',
       );
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Giai đoạn 2: Tính toán mã băm Keccak-256 ngay trên RAM
+      // Giai đoạn 2: Tạo mã nhận diện
       yield NotarizationProgress(
         step: NotarizationStep.hashing,
         progress: 0.50,
-        statusMessage: 'Đang băm mật mã Keccak-256 trên RAM điện thoại...',
+        statusMessage: 'Đang tạo mã bảo mật cho văn bằng...',
       );
-      currentHash = keccak256FromBytes(fileBytes);
+      currentHash = computeHashFromBytes(fileBytes, algorithm: algorithm);
       await Future.delayed(const Duration(milliseconds: 400));
 
-      // Giai đoạn 3: Ký số và đẩy lên Ethereum Sepolia
+      // Giai đoạn 3: Xác nhận và lưu lên sổ gốc
       yield NotarizationProgress(
         step: NotarizationStep.submittingBlockchain,
         progress: 0.75,
-        statusMessage: 'Đang ký số ECDSA & đẩy lên Smart Contract Sepolia...',
+        statusMessage: 'Đang xác nhận chữ ký số và lưu vào sổ gốc...',
         hash: currentHash,
       );
 
@@ -266,11 +307,13 @@ class HashService {
 
       if (res['success'] == true) {
         final txHash = res['transactionHash'] as String?;
-        final blockNumber = res['blockNumber'] as int?;
+        final blockNumber = res['blockNumber'] is int
+            ? res['blockNumber'] as int
+            : int.tryParse(res['blockNumber']?.toString() ?? '');
         yield NotarizationProgress(
           step: NotarizationStep.completed,
           progress: 1.0,
-          statusMessage: 'Niêm phong văn bằng lên Blockchain thành công!',
+          statusMessage: 'Cấp phát và lưu trữ văn bằng thành công!',
           hash: currentHash,
           txHash: txHash,
           blockNumber: blockNumber,
@@ -279,7 +322,8 @@ class HashService {
         yield NotarizationProgress(
           step: NotarizationStep.error,
           progress: 1.0,
-          statusMessage: res['error'] ?? 'Lỗi khi ký số văn bằng',
+          statusMessage:
+              res['error']?.toString() ?? 'Lỗi khi cấp phát văn bằng',
           hash: currentHash,
           errorMessage: res['error']?.toString(),
         );
@@ -289,7 +333,7 @@ class HashService {
       yield NotarizationProgress(
         step: NotarizationStep.error,
         progress: 1.0,
-        statusMessage: 'Lỗi trong quá trình niêm phong',
+        statusMessage: 'Lỗi trong quá trình cấp phát',
         hash: currentHash,
         errorMessage: e.toString(),
       );
