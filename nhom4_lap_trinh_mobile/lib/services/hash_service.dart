@@ -12,6 +12,22 @@ enum HashAlgorithm {
   sha256,
 }
 
+Map<String, String> _computeBothHashesInIsolate(Uint8List bytes) {
+  return <String, String>{
+    'keccak256': HashService.keccak256FromBytes(bytes),
+    'sha256': HashService.sha256FromBytes(bytes),
+  };
+}
+
+String _computeSingleHashInIsolate(Map<String, dynamic> args) {
+  final Uint8List bytes = args['bytes'] as Uint8List;
+  final int algoIndex = args['algoIndex'] as int;
+  return HashService.computeHashFromBytes(
+    bytes,
+    algorithm: HashAlgorithm.values[algoIndex],
+  );
+}
+
 enum VerificationStep {
   readingFile,
   hashing,
@@ -55,6 +71,8 @@ class NotarizationProgress {
   final String? txHash;
   final int? blockNumber;
   final String? errorMessage;
+  final bool isDuplicate;
+  final Map<String, dynamic>? existingRecord;
 
   NotarizationProgress({
     required this.step,
@@ -64,6 +82,8 @@ class NotarizationProgress {
     this.txHash,
     this.blockNumber,
     this.errorMessage,
+    this.isDuplicate = false,
+    this.existingRecord,
   });
 }
 
@@ -110,6 +130,28 @@ class HashService {
     }
   }
 
+  /// Tính đồng thời cả Keccak-256 và SHA-256 trên Isolate nền để không làm đơ UI
+  static Future<({String keccak256, String sha256})> computeBothHashesAsync(
+    Uint8List bytes,
+  ) async {
+    final result = await compute(_computeBothHashesInIsolate, bytes);
+    return (
+      keccak256: result['keccak256']!,
+      sha256: result['sha256']!,
+    );
+  }
+
+  /// Tính mã băm đơn trên Isolate nền để không làm đơ UI
+  static Future<String> computeHashFromBytesAsync(
+    Uint8List bytes, {
+    HashAlgorithm algorithm = HashAlgorithm.keccak256,
+  }) {
+    return compute(_computeSingleHashInIsolate, <String, dynamic>{
+      'bytes': bytes,
+      'algoIndex': algorithm.index,
+    });
+  }
+
   // ========================================================
   // 3. TIẾN TRÌNH XÁC MINH FILE THỜI GIAN THỰC (StreamBuilder async*/yield)
   // Đọc RAM -> Băm Keccak256/SHA256 -> Gọi REST API -> Trả kết quả
@@ -119,6 +161,8 @@ class HashService {
     required String fileName,
     required ApiService apiService,
     HashAlgorithm algorithm = HashAlgorithm.keccak256,
+    String? precomputedKeccak256,
+    String? precomputedSha256,
   }) async* {
     String? currentHash;
     try {
@@ -128,22 +172,30 @@ class HashService {
         progress: 0.25,
         statusMessage: 'Đang đọc tệp văn bằng trên điện thoại...',
       );
-      await Future.delayed(const Duration(milliseconds: 300));
+      await Future.delayed(const Duration(milliseconds: 120));
 
-      // Giai đoạn 2: Tạo mã nhận diện tài liệu (Tính đồng thời cả Keccak-256 & SHA-256)
+      // Giai đoạn 2: Tạo mã nhận diện tài liệu (Tái sử dụng hash đã tính nếu có, hoặc băm trên Isolate nền)
       yield VerificationProgress(
         step: VerificationStep.hashing,
         progress: 0.50,
         statusMessage: 'Đang tạo mã nhận diện văn bằng...',
       );
-      final primaryHash = computeHashFromBytes(fileBytes, algorithm: algorithm);
-      final fallbackAlgo = algorithm == HashAlgorithm.keccak256
-          ? HashAlgorithm.sha256
-          : HashAlgorithm.keccak256;
-      final secondaryHash =
-          computeHashFromBytes(fileBytes, algorithm: fallbackAlgo);
+      final String keccakHash;
+      final String sha256Hash;
+      if (precomputedKeccak256 != null && precomputedSha256 != null) {
+        keccakHash = precomputedKeccak256;
+        sha256Hash = precomputedSha256;
+      } else {
+        final computed = await computeBothHashesAsync(fileBytes);
+        keccakHash = computed.keccak256;
+        sha256Hash = computed.sha256;
+      }
+      final String primaryHash =
+          algorithm == HashAlgorithm.keccak256 ? keccakHash : sha256Hash;
+      final String secondaryHash =
+          algorithm == HashAlgorithm.keccak256 ? sha256Hash : keccakHash;
       currentHash = primaryHash;
-      await Future.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(const Duration(milliseconds: 150));
 
       // Giai đoạn 3: Đối chiếu với sổ gốc (Tự động kiểm tra cả chuẩn Tiêu chuẩn & Nâng cao)
       yield VerificationProgress(
@@ -277,14 +329,15 @@ class HashService {
       );
       await Future.delayed(const Duration(milliseconds: 300));
 
-      // Giai đoạn 2: Tạo mã nhận diện
+      // Giai đoạn 2: Tạo mã nhận diện trên Isolate nền
       yield NotarizationProgress(
         step: NotarizationStep.hashing,
         progress: 0.50,
         statusMessage: 'Đang tạo mã bảo mật cho văn bằng...',
       );
-      currentHash = computeHashFromBytes(fileBytes, algorithm: algorithm);
-      await Future.delayed(const Duration(milliseconds: 400));
+      currentHash =
+          await computeHashFromBytesAsync(fileBytes, algorithm: algorithm);
+      await Future.delayed(const Duration(milliseconds: 150));
 
       // Giai đoạn 3: Xác nhận và lưu lên sổ gốc
       yield NotarizationProgress(
@@ -305,7 +358,7 @@ class HashService {
         createdByEmail: createdByEmail,
       );
 
-      if (res['success'] == true) {
+      if (res['success'] == true && res['isDuplicate'] != true) {
         final txHash = res['transactionHash'] as String?;
         final blockNumber = res['blockNumber'] is int
             ? res['blockNumber'] as int
@@ -319,13 +372,20 @@ class HashService {
           blockNumber: blockNumber,
         );
       } else {
+        final bool isDup = res['isDuplicate'] == true;
+        final existing = res['existingRecord'] is Map
+            ? Map<String, dynamic>.from(res['existingRecord'] as Map)
+            : null;
         yield NotarizationProgress(
           step: NotarizationStep.error,
           progress: 1.0,
-          statusMessage:
-              res['error']?.toString() ?? 'Lỗi khi cấp phát văn bằng',
+          statusMessage: isDup
+              ? 'Tài liệu này đã tồn tại trên hệ thống!'
+              : (res['error']?.toString() ?? 'Lỗi khi cấp phát văn bằng'),
           hash: currentHash,
           errorMessage: res['error']?.toString(),
+          isDuplicate: isDup,
+          existingRecord: existing,
         );
       }
     } catch (e, stack) {

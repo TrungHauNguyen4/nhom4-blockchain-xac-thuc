@@ -426,7 +426,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Chuyển đổi nhanh vai trò sử dụng
+          // Thông tin vai trò & Nâng cấp Cán bộ (cố định SV/HR để minh bạch)
           Card(
             color: theme.colorScheme.surfaceContainerHighest,
             child: Padding(
@@ -436,11 +436,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.swap_horiz, size: 20),
+                      const Icon(Icons.verified_user_outlined, size: 20),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Chuyển đổi nhanh vai trò sử dụng',
+                          'Vai trò tài khoản: ${UserRole.getRoleLabel(user.role)}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
                             color: theme.colorScheme.primary,
@@ -449,58 +449,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: SegmentedButton<String>(
-                      showSelectedIcon: false,
-                      style: SegmentedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                      ),
-                      segments: const [
-                        ButtonSegment(
-                          value: UserRole.student,
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('Sinh Viên', style: TextStyle(fontSize: 11)),
-                          ),
-                          icon: Icon(Icons.school, size: 14),
-                        ),
-                        ButtonSegment(
-                          value: UserRole.employer,
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('Doanh Nghiệp', style: TextStyle(fontSize: 11)),
-                          ),
-                          icon: Icon(Icons.business, size: 14),
-                        ),
-                        ButtonSegment(
-                          value: UserRole.staff,
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('Cán Bộ', style: TextStyle(fontSize: 11)),
-                          ),
-                          icon: Icon(Icons.verified_user, size: 14),
-                        ),
-                      ],
-                      selected: {user.role},
-                      onSelectionChanged: (Set<String> newSelection) {
-                        final targetRole = newSelection.first;
-                        if (targetRole == UserRole.staff && !user.isStaff) {
-                          _promptStaffPasscode(context, authProvider);
-                        } else {
-                          authProvider.switchRoleForDemo(targetRole);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'Đã chuyển sang vai trò: ${UserRole.getRoleLabel(targetRole)}'),
-                            ),
-                          );
-                        }
-                      },
-                    ),
+                  const SizedBox(height: 6),
+                  Text(
+                    user.isStaff
+                        ? 'Tài khoản đã được ủy quyền Cán bộ đào tạo (có quyền ký số & cấp phát văn bằng).'
+                        : 'Vai trò Sinh viên / Nhà tuyển dụng được cố định theo tài khoản để đảm bảo tính minh bạch.',
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
                   ),
+                  if (!user.isStaff) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.key_outlined, size: 18),
+                        label: const Text('Nâng cấp lên Cán bộ (Nhập mã ủy quyền)'),
+                        onPressed: () =>
+                            _promptStaffPasscode(context, authProvider),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

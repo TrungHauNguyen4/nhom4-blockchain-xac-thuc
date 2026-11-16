@@ -59,6 +59,7 @@ class UserModel {
   final String email;
   final String? avatarBase64OrUrl;
   final String role; // 'student' | 'employer' | 'staff'
+  final String? originalRole; // Vai trò gốc trước khi nâng cấp lên 'staff'
   final String organization; // Trường học / Doanh nghiệp
   final String studentCode; // MSSV (dành cho sinh viên)
   final String createdAt;
@@ -69,6 +70,7 @@ class UserModel {
     required this.email,
     this.avatarBase64OrUrl,
     required this.role,
+    this.originalRole,
     this.organization = '',
     this.studentCode = '',
     required this.createdAt,
@@ -88,6 +90,8 @@ class UserModel {
       'email': email,
       'avatarBase64OrUrl': avatarBase64OrUrl,
       'role': role,
+      if (originalRole != null && originalRole!.isNotEmpty)
+        'originalRole': originalRole,
       'organization': organization,
       'studentCode': studentCode,
       'createdAt': createdAt,
@@ -102,6 +106,7 @@ class UserModel {
       email: (map['email'] ?? '').toString(),
       avatarBase64OrUrl: map['avatarBase64OrUrl']?.toString(),
       role: (map['role'] ?? UserRole.student).toString(),
+      originalRole: map['originalRole']?.toString(),
       organization: (map['organization'] ?? '').toString(),
       studentCode: (map['studentCode'] ?? '').toString(),
       createdAt: (map['createdAt'] ?? '').toString(),
@@ -120,6 +125,7 @@ class UserModel {
     String? email,
     String? avatarBase64OrUrl,
     String? role,
+    String? originalRole,
     String? organization,
     String? studentCode,
     String? createdAt,
@@ -130,6 +136,7 @@ class UserModel {
       email: email ?? this.email,
       avatarBase64OrUrl: avatarBase64OrUrl ?? this.avatarBase64OrUrl,
       role: role ?? this.role,
+      originalRole: originalRole ?? this.originalRole,
       organization: organization ?? this.organization,
       studentCode: studentCode ?? this.studentCode,
       createdAt: createdAt ?? this.createdAt,

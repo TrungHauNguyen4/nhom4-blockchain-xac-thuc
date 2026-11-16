@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 import '../../models/certificate_record.dart';
 import '../../models/scan_history_model.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/db_service.dart';
 import '../../widgets/certificate_card.dart';
 import '../verifier/verify_detail_screen.dart';
@@ -130,80 +132,19 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
     }
   }
 
-  // [CREATE] Thêm dữ liệu mẫu Offline để kiểm thử nhanh chế độ Máy bay & Xoay màn hình 2 cột
-  Future<void> _seedSampleOfflineData() async {
-    final nowUnix = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    final sample1 = CertificateRecord(
-      dataHash:
-          '0x8f4e2c1a9b7d6e5f3a2c4b8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f',
-      signer: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-      timestamp: nowUnix - 86400 * 30,
-      fileName: 'Bang_Ky_Su_CNTT_NguyenVanAn.pdf',
-      fileType: 'PDF',
-      txHash:
-          '0x3a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b',
-      blockNumber: 6912450,
-      studentName: 'Nguyễn Văn An',
-      studentCode: 'SV20221045',
-      degreeName: 'Bằng Kỹ sư Công nghệ Thông tin (Loại Giỏi)',
-      issuerName: 'Trường Đại học Công nghệ - Phòng Đào Tạo',
-    );
-
-    final sample2 = CertificateRecord(
-      dataHash:
-          '0x1c9d8e7f6a5b4c3d2e1f0a9b8c7d6e5f4a3b2c1d0e9f8a7b6c5d4e3f2a1b0c9d',
-      signer: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-      timestamp: nowUnix - 86400 * 10,
-      fileName: 'Chung_Chi_Blockchain_TranThiBich.png',
-      fileType: 'IMAGE',
-      txHash:
-          '0x9f8e7d6c5b4a3f2e1d0c9b8a7f6e5d4c3b2a1f0e9d8c7b6a5f4e3d2c1b0a9f8e',
-      blockNumber: 6958120,
-      studentName: 'Trần Thị Bích',
-      studentCode: 'SV20221088',
-      degreeName: 'Chứng chỉ An toàn & Bảo mật Blockchain',
-      issuerName: 'Viện Đào tạo Quốc tế & Chuyển đổi số',
-    );
-
-    await DatabaseService.instance.saveCertificate(sample1);
-    await DatabaseService.instance.saveCertificate(sample2);
-
-    await DatabaseService.instance.saveScanHistory(
-      ScanHistoryModel(
-        dataHash: sample1.dataHash,
-        fileName: sample1.fileName,
-        scanMethod: 'QR',
-        isValid: true,
-        issuerName: sample1.issuerName,
-        studentName: sample1.studentName,
-        degreeName: sample1.degreeName,
-      ),
-    );
-
-    await DatabaseService.instance.saveScanHistory(
-      ScanHistoryModel(
-        dataHash:
-            '0x0000deadbeef0000111122223333444455556666777788889999aaaabbbbcccc',
-        fileName: 'Bang_Tot_Nghiep_ChinhSua_Photoshop.pdf',
-        scanMethod: 'FILE',
-        isValid: false,
-        issuerName: 'Không tồn tại trên Blockchain',
-      ),
-    );
-
-    await reloadData();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        backgroundColor: Colors.green,
-        content: Text('Đã tải 2 văn bằng mẫu & 2 lịch sử tra cứu vào bộ nhớ máy!'),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final currentUser = Provider.of<AuthProvider?>(context)?.currentUser;
+    final String? myStudentCode = (currentUser != null &&
+            currentUser.isStudent &&
+            currentUser.studentCode.trim().isNotEmpty)
+        ? currentUser.studentCode.trim()
+        : null;
+    final bool isFilteringMyStudentCode = myStudentCode != null &&
+        _searchController.text.trim().toLowerCase() ==
+            myStudentCode.toLowerCase();
+
     return Column(
       children: [
         // Thanh tìm kiếm & TabBar con phong cách Glassy Pill V7
@@ -262,25 +203,13 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                     tooltip: 'Tùy chọn sổ tay',
                     icon: const Icon(Icons.more_vert),
                     onSelected: (value) {
-                      if (value == 'seed') {
-                        _seedSampleOfflineData();
-                      } else if (value == 'clear_history') {
+                      if (value == 'clear_history') {
                         _confirmClearHistory();
                       } else if (value == 'refresh') {
                         reloadData();
                       }
                     },
                     itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'seed',
-                        child: Row(
-                          children: [
-                            Icon(Icons.science_outlined, size: 18),
-                            SizedBox(width: 8),
-                            Flexible(child: Text('Tải văn bằng mẫu dùng thử')),
-                          ],
-                        ),
-                      ),
                       PopupMenuItem(
                         value: 'refresh',
                         child: Row(
@@ -305,18 +234,52 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                   ),
                 ],
               ),
+              if (myStudentCode != null) ...[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: ActionChip(
+                    avatar: Icon(
+                      isFilteringMyStudentCode
+                          ? Icons.check_circle
+                          : Icons.school_outlined,
+                      size: 16,
+                      color: isFilteringMyStudentCode
+                          ? Colors.teal
+                          : Colors.blueAccent,
+                    ),
+                    label: Text(
+                      isFilteringMyStudentCode
+                          ? 'Đang lọc văn bằng của tôi ($myStudentCode) • Nhấn để bỏ lọc'
+                          : '🎓 Văn bằng của tôi (MSSV: $myStudentCode)',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    onPressed: () {
+                      if (isFilteringMyStudentCode) {
+                        _searchController.clear();
+                      } else {
+                        _searchController.text = myStudentCode;
+                      }
+                      reloadData();
+                    },
+                  ),
+                ),
+              ],
               const SizedBox(height: 10),
               Container(
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? const Color(0xFF26293A).withValues(alpha: 0.85)
-                      : const Color(0xFFE4E9F2),
+                      ? const Color(0xFF18181A)
+                      : const Color(0xFFF7F6F2),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.14)
-                        : Colors.white.withValues(alpha: 0.9),
+                        ? Colors.white.withValues(alpha: 0.12)
+                        : const Color(0xFFD6D4CC),
                   ),
                 ),
                 child: TabBar(
@@ -327,20 +290,24 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                   indicatorSize: TabBarIndicatorSize.tab,
                   indicatorAnimation: TabIndicatorAnimation.elastic,
                   indicator: BoxDecoration(
-                    color: isDark ? Colors.white : const Color(0xFF1E2230),
+                    color: isDark
+                        ? const Color(0xFFECEBE6)
+                        : const Color(0xFF565C43),
                     borderRadius: BorderRadius.circular(999),
                     boxShadow: [
                       BoxShadow(
                         color: isDark
-                            ? Colors.white.withValues(alpha: 0.25)
-                            : Colors.black.withValues(alpha: 0.18),
+                            ? Colors.white.withValues(alpha: 0.18)
+                            : Colors.black.withValues(alpha: 0.15),
                         blurRadius: 10,
                       ),
                     ],
                   ),
-                  labelColor: isDark ? const Color(0xFF161822) : Colors.white,
+                  labelColor: isDark
+                      ? const Color(0xFF141416)
+                      : const Color(0xFFECEBE6),
                   unselectedLabelColor:
-                      isDark ? Colors.white70 : const Color(0xFF4A5060),
+                      isDark ? Colors.white70 : const Color(0xFF5C5B57),
                   tabs: [
                     Tab(
                       height: 38,
@@ -424,15 +391,6 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                 'Hãy xác thực văn bằng và bấm Lưu Offline để xem lại bất cứ lúc nào mà không cần Internet!',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 12.5, color: Colors.grey),
-              ),
-              const SizedBox(height: 16),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.add_moderator_outlined),
-                label: const FittedBox(
-                  fit: BoxFit.scaleDown,
-                  child: Text('Nạp nhanh 2 văn bằng mẫu để trải nghiệm'),
-                ),
-                onPressed: _seedSampleOfflineData,
               ),
             ],
           ),

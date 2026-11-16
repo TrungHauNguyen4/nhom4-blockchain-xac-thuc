@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../services/hash_service.dart';
+import '../../services/local_file_save_service.dart';
 import '../../widgets/progress_stream_card.dart';
 import '../verifier/verify_detail_screen.dart';
 import 'issued_list_screen.dart';
@@ -45,11 +47,17 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
   // Tùy chọn thuật toán băm
   HashAlgorithm _selectedAlgorithm = HashAlgorithm.keccak256;
 
-  // Stream tiến trình ký số cho StreamBuilder
+  // Stream tiến trình ký số an toàn (Broadcast để không lỗi khi xoay màn hình / chuyển tab)
+  StreamController<NotarizationProgress>? _notarizeController;
+  StreamSubscription<NotarizationProgress>? _notarizeSub;
   Stream<NotarizationProgress>? _notarizeStream;
+  bool _isNotarizing = false;
 
-  // Kết quả sau khi ký thành công
+  // Kết quả sau khi ký thành công hoặc lỗi trùng lặp
   NotarizationProgress? _completedProgress;
+  NotarizationProgress? _errorProgress;
+  bool _isSavingSignedFile = false;
+  SavedFileResult? _lastSavedResult;
 
   @override
   void initState() {
@@ -68,11 +76,65 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
 
   @override
   void dispose() {
+    _notarizeSub?.cancel();
+    _notarizeController?.close();
     _studentNameController.dispose();
     _studentCodeController.dispose();
     _degreeNameController.dispose();
     _issuerNameController.dispose();
     super.dispose();
+  }
+
+  void _disposeActiveStream() {
+    _notarizeSub?.cancel();
+    _notarizeSub = null;
+    _notarizeController?.close();
+    _notarizeController = null;
+  }
+
+  bool get _hasUnsavedDraftOrInProgress {
+    if (_isNotarizing) return true;
+    if (_completedProgress != null) return false;
+    return _selectedFileBytes != null ||
+        _studentNameController.text.trim().isNotEmpty ||
+        _studentCodeController.text.trim().isNotEmpty ||
+        _degreeNameController.text.trim().isNotEmpty;
+  }
+
+  Future<void> _confirmExitScreen() async {
+    final shouldExit = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(
+          _isNotarizing
+              ? 'Đang xử lý ký số Blockchain'
+              : 'Chưa hoàn tất cấp văn bằng',
+        ),
+        content: Text(
+          _isNotarizing
+              ? 'Hệ thống đang gửi giao dịch ký số. Bạn có chắc muốn rời khỏi màn hình này không?'
+              : 'Bạn đã chọn tài liệu hoặc nhập thông tin nhưng chưa bấm cấp bằng. Bạn có muốn thoát không?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Ở lại'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Thoát'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldExit == true && mounted) {
+      Navigator.of(context).pop();
+    }
   }
 
   // ========================================================
@@ -124,6 +186,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
             ? await File(file.path).readAsBytes()
             : await file.readAsBytes();
         if (!mounted) return;
+        _disposeActiveStream();
         setState(() {
           _selectedFileBytes = bytes;
           _selectedFileName = file.name;
@@ -131,6 +194,9 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
           _isImagePreview = true;
           _notarizeStream = null;
           _completedProgress = null;
+          _errorProgress = null;
+          _isNotarizing = false;
+          _lastSavedResult = null;
         });
       }
     } catch (e) {
@@ -174,6 +240,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
         final isImg = ext == 'png' || ext == 'jpg' || ext == 'jpeg';
 
         if (!mounted) return;
+        _disposeActiveStream();
         setState(() {
           _selectedFileBytes = bytes;
           _selectedFileName = file.name;
@@ -181,6 +248,9 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
           _isImagePreview = isImg;
           _notarizeStream = null;
           _completedProgress = null;
+          _errorProgress = null;
+          _isNotarizing = false;
+          _lastSavedResult = null;
         });
       }
     } catch (e) {
@@ -192,9 +262,11 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
   }
 
   // ========================================================
-  // TIẾN TRÌNH KÝ SỐ BLOCKCHAIN THỜI GIAN THỰC (StreamBuilder)
+  // TIẾN TRÌNH KÝ SỐ BLOCKCHAIN THỜI GIAN THỰC (Broadcast Stream)
   // ========================================================
-  void _startNotarization() {
+  Future<void> _confirmAndStartNotarization() async {
+    if (_isNotarizing) return;
+
     if (_selectedFileBytes == null || _selectedFileName == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -207,53 +279,161 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
 
     if (!_formKey.currentState!.validate()) return;
 
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Row(
+          children: [
+            Icon(Icons.verified_user_outlined, color: Color(0xFF565C43)),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Xác nhận Ký số Văn bằng',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Dữ liệu sau khi niêm phong lên Blockchain sẽ không thể sửa đổi. Vui lòng kiểm tra kỹ:',
+              style: TextStyle(fontSize: 12.5, color: Colors.grey),
+            ),
+            const SizedBox(height: 10),
+            Text('• Tệp: $_selectedFileName', style: const TextStyle(fontSize: 13)),
+            Text(
+              '• Sinh viên: ${_studentNameController.text.trim()} (${_studentCodeController.text.trim()})',
+              style: const TextStyle(fontSize: 13),
+            ),
+            Text(
+              '• Văn bằng: ${_degreeNameController.text.trim()}',
+              style: const TextStyle(fontSize: 13),
+            ),
+            Text(
+              '• Đơn vị cấp: ${_issuerNameController.text.trim()}',
+              style: const TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Hủy'),
+          ),
+          ElevatedButton.icon(
+            icon: const Icon(Icons.check_circle_outline, size: 17),
+            label: const Text('Xác nhận Ký số'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF565C43),
+              foregroundColor: const Color(0xFFECEBE6),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      _startNotarization();
+    }
+  }
+
+  void _startNotarization() {
+    if (_isNotarizing || _selectedFileBytes == null || _selectedFileName == null) {
+      return;
+    }
+
     final apiService = context.read<ApiService>();
     final user = context.read<AuthProvider>().currentUser;
+    final studentName = _studentNameController.text.trim();
+    final studentCode = _studentCodeController.text.trim();
+    final degreeName = _degreeNameController.text.trim();
+    final issuerName = _issuerNameController.text.trim();
+    final fileName = _selectedFileName!;
+    final fileType = _selectedFileType;
+
+    _disposeActiveStream();
+    final controller = StreamController<NotarizationProgress>.broadcast();
 
     setState(() {
+      _isNotarizing = true;
       _completedProgress = null;
-      _notarizeStream = HashService.notarizeFileStream(
-        fileBytes: _selectedFileBytes!,
-        fileName: _selectedFileName!,
-        apiService: apiService,
-        fileType: _selectedFileType,
-        studentName: _studentNameController.text.trim(),
-        studentCode: _studentCodeController.text.trim(),
-        degreeName: _degreeNameController.text.trim(),
-        issuerName: _issuerNameController.text.trim(),
-        createdByEmail: user?.email,
-        algorithm: _selectedAlgorithm,
-      ).map((progress) {
+      _errorProgress = null;
+      _notarizeController = controller;
+      _notarizeStream = controller.stream;
+    });
+
+    final sourceStream = HashService.notarizeFileStream(
+      fileBytes: _selectedFileBytes!,
+      fileName: fileName,
+      apiService: apiService,
+      fileType: fileType,
+      studentName: studentName,
+      studentCode: studentCode,
+      degreeName: degreeName,
+      issuerName: issuerName,
+      createdByEmail: user?.email,
+      algorithm: _selectedAlgorithm,
+    );
+
+    _notarizeSub = sourceStream.listen(
+      (progress) {
+        if (!controller.isClosed) {
+          controller.add(progress);
+        }
+        if (!mounted) return;
+
         if (progress.step == NotarizationStep.completed) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && _completedProgress?.hash != progress.hash) {
-              setState(() {
-                _completedProgress = progress;
-              });
-              // Tự động đồng bộ bản sao vào Sổ tay Offline Sqflite để khi tắt Laptop vẫn giữ đủ Họ tên, MSSV
-              if (progress.hash != null) {
-                DatabaseService.instance.saveCertificate(
-                  CertificateRecord(
-                    dataHash: progress.hash!,
-                    signer: '0xDF098FcEA905839FA80728D806069BF06b24F145',
-                    timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-                    fileName: _selectedFileName ?? 'Van_Bang_Moi.pdf',
-                    fileType: _selectedFileType,
-                    txHash: progress.txHash,
-                    blockNumber: progress.blockNumber,
-                    studentName: _studentNameController.text.trim(),
-                    studentCode: _studentCodeController.text.trim(),
-                    degreeName: _degreeNameController.text.trim(),
-                    issuerName: _issuerNameController.text.trim(),
-                  ),
-                );
-              }
-            }
+          setState(() {
+            _isNotarizing = false;
+            _completedProgress = progress;
+            _errorProgress = null;
+          });
+          // Chỉ lưu vào Sổ tay Offline Sqflite khi ký mới THÀNH CÔNG thực sự
+          if (progress.hash != null) {
+            DatabaseService.instance.saveCertificate(
+              CertificateRecord(
+                dataHash: progress.hash!,
+                signer: '0xDF098FcEA905839FA80728D806069BF06b24F145',
+                timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+                fileName: fileName,
+                fileType: fileType,
+                txHash: progress.txHash,
+                blockNumber: progress.blockNumber,
+                studentName: studentName,
+                studentCode: studentCode,
+                degreeName: degreeName,
+                issuerName: issuerName,
+              ),
+            );
+          }
+        } else if (progress.step == NotarizationStep.error) {
+          setState(() {
+            _isNotarizing = false;
+            _errorProgress = progress;
           });
         }
-        return progress;
-      });
-    });
+      },
+      onError: (e) {
+        if (!controller.isClosed) {
+          controller.addError(e);
+        }
+        if (mounted) {
+          setState(() => _isNotarizing = false);
+        }
+      },
+      onDone: () {
+        if (!controller.isClosed) {
+          controller.close();
+        }
+        if (mounted && _isNotarizing) {
+          setState(() => _isNotarizing = false);
+        }
+      },
+    );
   }
 
   @override
@@ -364,28 +544,36 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
       return content;
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const FittedBox(
-          fit: BoxFit.scaleDown,
-          child: Text('Ký Số Văn Bằng (Cán Bộ)'),
-        ),
-        actions: [
-          IconButton(
-            tooltip: 'Sổ bộ văn bằng đã ký',
-            icon: const Icon(Icons.history_edu),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const IssuedListScreen(),
-                ),
-              );
-            },
+    return PopScope(
+      canPop: !_hasUnsavedDraftOrInProgress,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) {
+          _confirmExitScreen();
+        }
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: const FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text('Ký Số Văn Bằng (Cán Bộ)'),
           ),
-        ],
+          actions: [
+            IconButton(
+              tooltip: 'Sổ bộ văn bằng đã ký',
+              icon: const Icon(Icons.history_edu),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const IssuedListScreen(),
+                  ),
+                );
+              },
+            ),
+          ],
+        ),
+        body: content,
       ),
-      body: content,
     );
   }
 
@@ -660,21 +848,32 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
       height: 50,
       child: ElevatedButton.icon(
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF5E35B1),
-          foregroundColor: Colors.white,
+          backgroundColor: const Color(0xFF565C43),
+          foregroundColor: const Color(0xFFECEBE6),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
         ),
-        icon: const Icon(Icons.verified_outlined),
-        label: const FittedBox(
+        icon: _isNotarizing
+            ? const SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: Colors.white,
+                ),
+              )
+            : const Icon(Icons.verified_outlined),
+        label: FittedBox(
           fit: BoxFit.scaleDown,
           child: Text(
-            'XÁC NHẬN & CẤP MÃ QR VĂN BẰNG',
-            style: TextStyle(fontWeight: FontWeight.bold),
+            _isNotarizing
+                ? 'ĐANG KÝ SỐ LÊN BLOCKCHAIN...'
+                : 'XÁC NHẬN & CẤP MÃ QR VĂN BẰNG',
+            style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
-        onPressed: _startNotarization,
+        onPressed: _isNotarizing ? null : _confirmAndStartNotarization,
       ),
     );
   }
@@ -721,18 +920,119 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
           if (_notarizeStream != null)
             ProgressStreamCard.notarization(
               stream: _notarizeStream!,
-              onNotarizationCompleted: (progress) {
-                setState(() {
-                  _completedProgress = progress;
-                });
-              },
             ),
           if (_completedProgress != null &&
               _completedProgress!.step == NotarizationStep.completed) ...[
             const SizedBox(height: 16),
             _buildSuccessReceiptCard(_completedProgress!),
           ],
+          if (_errorProgress != null && _errorProgress!.isDuplicate) ...[
+            const SizedBox(height: 16),
+            _buildDuplicateWarningCard(_errorProgress!),
+          ],
         ],
+      ),
+    );
+  }
+
+  Future<void> _saveSignedFileToDevice(String hash) async {
+    final bytes = _selectedFileBytes;
+    if (bytes == null || _isSavingSignedFile) return;
+
+    setState(() => _isSavingSignedFile = true);
+    final fileName = LocalFileSaveService.buildSignedFileName(
+      originalFileName: _selectedFileName ?? 'signed_certificate.jpg',
+      hash: hash,
+      fileType: _selectedFileType,
+    );
+
+    final result = await LocalFileSaveService.saveToDownloadsAndGallery(
+      bytes: bytes,
+      fileName: fileName,
+      fileType: _selectedFileType,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _isSavingSignedFile = false;
+      _lastSavedResult = result;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          result.success
+              ? 'Đã lưu tệp gốc vào Downloads/CertChain${result.gallerySaved ? " & Thư viện ảnh" : ""}. Khi kiểm tra lại hãy dùng mục "Chọn File" để không bị đổi byte!'
+              : (result.errorMessage ?? 'Không thể lưu tệp về máy.'),
+        ),
+        backgroundColor: result.success ? Colors.green.shade700 : Colors.red,
+        duration: const Duration(seconds: 5),
+      ),
+    );
+  }
+
+  // Thẻ cảnh báo khi Cán bộ chọn trùng tài liệu đã từng niêm phong
+  Widget _buildDuplicateWarningCard(NotarizationProgress progress) {
+    final existing = progress.existingRecord;
+    final oldStudent = existing?['studentName']?.toString();
+    final oldCode = existing?['studentCode']?.toString();
+    final oldDegree = existing?['degreeName']?.toString();
+
+    return Card(
+      color: Colors.orange.withValues(alpha: 0.12),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: Colors.orange, width: 1.5),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 28),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'TÀI LIỆU ĐÃ TỒN TẠI (TRÙNG MÃ BĂM)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.orange,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              progress.errorMessage ??
+                  'File này đã được niêm phong trên Blockchain từ trước nên hệ thống từ chối ký đè và không lưu vào Sổ tay.',
+              style: const TextStyle(fontSize: 13),
+            ),
+            if (oldStudent != null || oldDegree != null) ...[
+              const Divider(height: 20),
+              const Text(
+                'Thông tin văn bằng gốc đang lưu trên hệ thống:',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
+              ),
+              const SizedBox(height: 4),
+              if (oldDegree != null && oldDegree.isNotEmpty)
+                Text('• Văn bằng: $oldDegree', style: const TextStyle(fontSize: 12.5)),
+              if (oldStudent != null && oldStudent.isNotEmpty)
+                Text(
+                  '• Sinh viên: $oldStudent${(oldCode != null && oldCode.isNotEmpty) ? " ($oldCode)" : ""}',
+                  style: const TextStyle(fontSize: 12.5),
+                ),
+            ],
+            const SizedBox(height: 10),
+            const Text(
+              'Gợi ý: Vui lòng chọn một file Ảnh/PDF gốc khác nếu bạn muốn cấp văn bằng mới cho sinh viên khác.',
+              style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -830,6 +1130,33 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               runSpacing: 8,
               alignment: WrapAlignment.center,
               children: [
+                if (_selectedFileBytes != null)
+                  ElevatedButton.icon(
+                    icon: _isSavingSignedFile
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.download_outlined, size: 18),
+                    label: Text(
+                      _isSavingSignedFile
+                          ? 'Đang lưu...'
+                          : (_selectedFileType == 'IMAGE'
+                              ? 'Lưu ảnh đã ký về máy'
+                              : 'Lưu tệp đã ký về máy'),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.blue.shade700,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _isSavingSignedFile
+                        ? null
+                        : () => _saveSignedFileToDevice(hash),
+                  ),
                 OutlinedButton.icon(
                   icon: const Icon(Icons.copy, size: 17),
                   label: const Text('Sao chép mã văn bằng'),
@@ -876,6 +1203,56 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
                 ),
               ],
             ),
+            if (_lastSavedResult != null && _lastSavedResult!.success) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withValues(alpha: 0.14),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: Colors.amber.shade700.withValues(alpha: 0.5),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.info_outline,
+                          size: 16,
+                          color: isDark
+                              ? Colors.amberAccent
+                              : Colors.amber.shade900,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'Đã lưu tệp gốc: ${_lastSavedResult!.downloadsPath ?? "Downloads/CertChain"}'
+                            '${_lastSavedResult!.gallerySaved ? " & Thư viện ảnh (${_lastSavedResult!.galleryPath})" : ""}',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 11.5,
+                              color: primaryTextColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Hướng dẫn kiểm tra: Hãy dùng mục "Chọn File" để mở tệp gốc trong thư mục Downloads/CertChain nhằm giữ nguyên 100% byte. Không chọn qua app Gallery/Zalo/Messenger chế độ thường vì có thể bị nén lại làm đổi mã Hash.',
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: secondaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ],
         ),
       ),

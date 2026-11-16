@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class ThemeProvider extends ChangeNotifier {
   static const String _prefDarkModeKey = 'is_dark_mode_enabled';
 
-  ThemeMode _themeMode = ThemeMode.system;
+  ThemeMode _themeMode = ThemeMode.dark;
 
   ThemeProvider() {
     _loadThemeFromPrefs();
@@ -43,31 +43,34 @@ class ThemeProvider extends ChangeNotifier {
   }
 
   // ========================================================
-  // BỘ THEME PHONG CÁCH GLASSMORPHISM V7 (Material 3)
+  // BỘ THEME PHONG CÁCH EDITORIAL MINIMALIST (Material 3)
+  // Đồng bộ toàn hệ thống: #0E0E10 • #18181A • #565C43 • #ECEBE6
   // ========================================================
   static final ThemeData lightTheme = ThemeData(
     useMaterial3: true,
     brightness: Brightness.light,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF1E88E5),
+      seedColor: const Color(0xFF565C43),
       brightness: Brightness.light,
-      primary: const Color(0xFF1558B0),
-      secondary: const Color(0xFF00897B),
-      surface: const Color(0xFFFAFCFF),
+      primary: const Color(0xFF565C43),
+      onPrimary: const Color(0xFFECEBE6),
+      secondary: const Color(0xFF3E4230),
+      surface: const Color(0xFFF7F6F2),
+      onSurface: const Color(0xFF141416),
     ),
-    scaffoldBackgroundColor: const Color(0xFFF2F5FA),
+    scaffoldBackgroundColor: const Color(0xFFECEBE6),
     appBarTheme: const AppBarTheme(
       elevation: 0,
       centerTitle: true,
-      backgroundColor: Color(0xFF14213D),
-      foregroundColor: Colors.white,
+      backgroundColor: Color(0xFF18181A),
+      foregroundColor: Color(0xFFECEBE6),
     ),
     cardTheme: CardThemeData(
-      color: Colors.white.withValues(alpha: 0.94),
+      color: const Color(0xFFF7F6F2),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
-        side: const BorderSide(color: Color(0xFFE2E8F0), width: 1.2),
+        side: const BorderSide(color: Color(0xFFD6D4CC), width: 1.1),
       ),
     ),
   );
@@ -76,25 +79,30 @@ class ThemeProvider extends ChangeNotifier {
     useMaterial3: true,
     brightness: Brightness.dark,
     colorScheme: ColorScheme.fromSeed(
-      seedColor: const Color(0xFF64B5F6),
+      seedColor: const Color(0xFF565C43),
       brightness: Brightness.dark,
-      primary: const Color(0xFF90CAF9),
-      secondary: const Color(0xFF4DB6AC),
-      surface: const Color(0xFF1C1E2B),
+      primary: const Color(0xFF8E9773),
+      onPrimary: const Color(0xFF0E0E10),
+      primaryContainer: const Color(0xFF565C43),
+      onPrimaryContainer: const Color(0xFFECEBE6),
+      secondary: const Color(0xFFECEBE6),
+      onSecondary: const Color(0xFF141416),
+      surface: const Color(0xFF18181A),
+      onSurface: const Color(0xFFECEBE6),
     ),
-    scaffoldBackgroundColor: const Color(0xFF11131D),
+    scaffoldBackgroundColor: const Color(0xFF0E0E10),
     appBarTheme: const AppBarTheme(
       elevation: 0,
       centerTitle: true,
-      backgroundColor: Color(0xFF171A26),
-      foregroundColor: Colors.white,
+      backgroundColor: Color(0xFF141416),
+      foregroundColor: Color(0xFFECEBE6),
     ),
     cardTheme: CardThemeData(
-      color: const Color(0xFF212434).withValues(alpha: 0.86),
+      color: const Color(0xFF18181A),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(22),
-        side: BorderSide(color: Colors.white.withValues(alpha: 0.12), width: 1.1),
+        side: BorderSide(color: Colors.white.withValues(alpha: 0.10), width: 1.1),
       ),
     ),
   );

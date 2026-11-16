@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../../models/certificate_record.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/db_service.dart';
+import '../../services/hr_review_service.dart';
 
 class VerifyDetailScreen extends StatefulWidget {
   final CertificateRecord? record;
@@ -24,10 +27,610 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
   bool _isSaved = false;
   bool _isLoading = false;
 
+  // Trạng thái thẩm định HR (dành cho role Nhà tuyển dụng)
+  String _hrStatus = 'APPROVED'; // APPROVED, PENDING, REJECTED
+  bool _hasSavedHrReview = false;
+  final TextEditingController _hrNoteController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _checkSavedStatus();
+    _loadHrReview();
+  }
+
+  @override
+  void dispose() {
+    _hrNoteController.dispose();
+    super.dispose();
+  }
+
+  final HrReviewService _hrReviewService = HrReviewService();
+
+  String get _effectiveHashKey =>
+      _hrReviewService.normalizeHashKey(
+        widget.record?.dataHash ?? widget.searchedHash,
+      );
+
+  Future<void> _loadHrReview() async {
+    try {
+      final uid = Provider.of<AuthProvider?>(context, listen: false)
+          ?.currentUser
+          ?.uid;
+      final reviews = await _hrReviewService.fetchReviews(uid: uid);
+      final item = reviews[_effectiveHashKey];
+      if (item != null && mounted) {
+        setState(() {
+          _hrStatus = (item['status'] ?? 'APPROVED').toString();
+          _hrNoteController.text = (item['note'] ?? '').toString();
+          _hasSavedHrReview = true;
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveHrReview() async {
+    try {
+      final uid = Provider.of<AuthProvider?>(context, listen: false)
+          ?.currentUser
+          ?.uid;
+      final now = DateTime.now();
+      final formattedNow =
+          '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+          '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+      final record = widget.record;
+      final reviewPayload = {
+        'dataHash': record?.dataHash ?? widget.searchedHash,
+        'status': _hrStatus,
+        'note': _hrNoteController.text.trim(),
+        'signer': record?.signer ?? '',
+        'timestamp': record?.timestamp ?? 0,
+        'fileName': record?.fileName ?? 'Văn bằng kiểm tra',
+        'fileType': record?.fileType ?? 'DOCUMENT',
+        'txHash': record?.txHash,
+        'blockNumber': record?.blockNumber,
+        'studentName': record?.studentName ?? 'Ứng viên chưa định danh',
+        'studentCode': record?.studentCode ?? '',
+        'degreeName': record?.degreeName ?? record?.fileName ?? 'Hồ sơ kiểm tra',
+        'issuerName': record?.issuerName ?? '',
+        'isValid': record != null && record.isValid,
+        'updatedAt': formattedNow,
+      };
+
+      await _hrReviewService.saveReview(
+        uid: uid,
+        hashKey: _effectiveHashKey,
+        reviewData: reviewPayload,
+      );
+
+      // Tự động lưu văn bằng hợp lệ vào Sổ tay Offline để khi mở lại từ Trung tâm Thẩm định HR luôn đủ thông tin & QR
+      if (record != null && record.isValid) {
+        await DatabaseService.instance.saveCertificate(record);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _hasSavedHrReview = true;
+        if (record != null && record.isValid) {
+          _isSaved = true;
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.teal,
+          content: Text('Đã lưu quyết định thẩm định HR vào hồ sơ tuyển dụng!'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Không thể lưu đánh giá HR: $e')),
+      );
+    }
+  }
+
+  void _showHrAuditReportDialog(BuildContext context) {
+    final auth = Provider.of<AuthProvider?>(context, listen: false);
+    final hrUser = auth?.currentUser;
+    final record = widget.record;
+    final bool isValid = record != null && record.isValid;
+
+    String statusLabel;
+    switch (_hrStatus) {
+      case 'APPROVED':
+        statusLabel = 'ĐẠT THẨM ĐỊNH (ĐỦ ĐIỀU KIỆN TUYỂN DỤNG)';
+        break;
+      case 'PENDING':
+        statusLabel = 'CHỜ BỔ SUNG HỒ SƠ GỐC';
+        break;
+      case 'REJECTED':
+        statusLabel = 'TỪ CHỐI HỒ SƠ';
+        break;
+      default:
+        statusLabel = _hrStatus;
+    }
+
+    final now = DateTime.now();
+    final timeStr =
+        '${now.day.toString().padLeft(2, '0')}/${now.month.toString().padLeft(2, '0')}/${now.year} '
+        '${now.hour.toString().padLeft(2, '0')}:${now.minute.toString().padLeft(2, '0')}';
+
+    final reportText = [
+      '=== BIÊN BẢN THẨM ĐỊNH VĂN BẰNG BLOCKCHAIN (HR) ===',
+      'Thời gian lập: $timeStr',
+      'Đơn vị thẩm định: ${hrUser?.organization ?? "Bộ phận Tuyển dụng HR"}',
+      'Chuyên viên thẩm định: ${hrUser?.name ?? "HR Verifier"} (${hrUser?.email ?? ""})',
+      '---------------------------------------------------',
+      'KẾT QUẢ ĐỐI SOÁT SỔ GỐC: ${isValid ? "HỢP LỆ (CHÍNH CHỦ)" : "CẢNH BÁO KHÔNG TỒN TẠI / BẰNG GIẢ"}',
+      'Họ tên ứng viên: ${record?.studentName ?? "N/A"}',
+      'Mã số sinh viên: ${record?.studentCode ?? "N/A"}',
+      'Tên văn bằng: ${record?.degreeName ?? record?.fileName ?? "N/A"}',
+      'Đơn vị cấp phát: ${record?.issuerName ?? "N/A"}',
+      'Ngày cấp trên Blockchain: ${record?.formattedBlockchainDate ?? "N/A"}',
+      'Mã băm văn bằng (Hash): ${record?.dataHash ?? widget.searchedHash}',
+      if (record?.txHash != null && record!.txHash!.isNotEmpty)
+        'Mã giao dịch (TxHash): ${record.txHash}',
+      '---------------------------------------------------',
+      'QUYẾT ĐỊNH TUYỂN DỤNG HR: $statusLabel',
+      'Ghi chú phỏng vấn: ${_hrNoteController.text.trim().isEmpty ? "(Không có)" : _hrNoteController.text.trim()}',
+      '===================================================',
+    ].join('\n');
+
+    final String hrNote = _hrNoteController.text.trim();
+    Color statusColor;
+    String statusShortLabel;
+    switch (_hrStatus) {
+      case 'APPROVED':
+        statusColor = Colors.green;
+        statusShortLabel = 'ĐẠT THẨM ĐỊNH';
+        break;
+      case 'PENDING':
+        statusColor = Colors.orange;
+        statusShortLabel = 'CHỜ BỔ SUNG';
+        break;
+      case 'REJECTED':
+        statusColor = Colors.redAccent;
+        statusShortLabel = 'TỪ CHỐI HỒ SƠ';
+        break;
+      default:
+        statusColor = Colors.blueGrey;
+        statusShortLabel = _hrStatus;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final isDark = Theme.of(ctx).brightness == Brightness.dark;
+        return Dialog(
+          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+          clipBehavior: Clip.antiAlias,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // 1. Header Biên bản chính thức
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.fromLTRB(18, 16, 14, 16),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [Color(0xFF18181A), Color(0xFF565C43)],
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.18),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(
+                          Icons.verified_user_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Text(
+                                'BIÊN BẢN THẨM ĐỊNH VĂN BẰNG (HR)',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 0.3,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Ngày lập: $timeStr',
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 11.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white70),
+                        tooltip: 'Đóng',
+                        onPressed: () => Navigator.pop(ctx),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 2. Nội dung chi tiết dạng Phiếu hành chính
+                Flexible(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Banner Kết quả đối soát Blockchain
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isValid
+                                ? Colors.green.withValues(alpha: 0.12)
+                                : Colors.red.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: isValid
+                                  ? Colors.green.withValues(alpha: 0.5)
+                                  : Colors.red.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                isValid ? Icons.verified : Icons.gpp_bad,
+                                color: isValid ? Colors.green : Colors.red,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      isValid
+                                          ? 'KẾT QUẢ ĐỐI SOÁT: HỢP LỆ (CHÍNH CHỦ)'
+                                          : 'KẾT QUẢ ĐỐI SOÁT: KHÔNG TỒN TẠI',
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12.5,
+                                        color: isValid
+                                            ? (isDark
+                                                ? Colors.greenAccent
+                                                : Colors.green.shade800)
+                                            : Colors.redAccent,
+                                      ),
+                                    ),
+                                    const Text(
+                                      'Đối chiếu trực tiếp từ sổ gốc điện tử Blockchain',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Thông tin Đơn vị & Chuyên viên HR
+                        _buildReportSectionTitle('I. ĐƠN VỊ THẨM ĐỊNH'),
+                        const SizedBox(height: 6),
+                        _buildReportCardContainer(
+                          ctx,
+                          children: [
+                            _buildReportRow(
+                              'Đơn vị HR:',
+                              hrUser?.organization.trim().isNotEmpty == true
+                                  ? hrUser!.organization
+                                  : 'Bộ phận Tuyển dụng HR',
+                            ),
+                            const Divider(height: 12),
+                            _buildReportRow(
+                              'Chuyên viên:',
+                              hrUser?.name ?? 'HR Verifier',
+                            ),
+                            if (hrUser?.email != null &&
+                                hrUser!.email.isNotEmpty) ...[
+                              const Divider(height: 12),
+                              _buildReportRow('Email HR:', hrUser.email),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Thông tin Ứng viên & Văn bằng
+                        _buildReportSectionTitle('II. HỒ SƠ VĂN BẰNG ỨNG VIÊN'),
+                        const SizedBox(height: 6),
+                        _buildReportCardContainer(
+                          ctx,
+                          children: [
+                            _buildReportRow(
+                              'Họ tên ứng viên:',
+                              record?.studentName ?? 'N/A',
+                            ),
+                            const Divider(height: 12),
+                            _buildReportRow(
+                              'Mã số sinh viên:',
+                              record?.studentCode ?? 'N/A',
+                            ),
+                            const Divider(height: 12),
+                            _buildReportRow(
+                              'Tên văn bằng:',
+                              record?.degreeName ?? record?.fileName ?? 'N/A',
+                            ),
+                            const Divider(height: 12),
+                            _buildReportRow(
+                              'Đơn vị cấp phát:',
+                              record?.issuerName ?? 'N/A',
+                            ),
+                            const Divider(height: 12),
+                            _buildReportRow(
+                              'Ngày cấp gốc:',
+                              record?.formattedBlockchainDate ?? 'N/A',
+                            ),
+                            const Divider(height: 12),
+                            const Text(
+                              'Mã băm định danh (DataHash):',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Theme.of(ctx)
+                                    .colorScheme
+                                    .surfaceContainerHighest
+                                    .withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: SelectableText(
+                                record?.dataHash ?? widget.searchedHash,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontFamily: 'monospace',
+                                ),
+                              ),
+                            ),
+                            if (record?.txHash != null &&
+                                record!.txHash!.isNotEmpty) ...[
+                              const SizedBox(height: 8),
+                              const Text(
+                                'Mã giao dịch (TxHash):',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(8),
+                                decoration: BoxDecoration(
+                                  color: Theme.of(ctx)
+                                      .colorScheme
+                                      .surfaceContainerHighest
+                                      .withValues(alpha: 0.5),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: SelectableText(
+                                  record.txHash!,
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontFamily: 'monospace',
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+
+                        // Quyết định Tuyển dụng
+                        _buildReportSectionTitle('III. KẾT LUẬN TUYỂN DỤNG'),
+                        const SizedBox(height: 6),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: statusColor.withValues(alpha: 0.45),
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: statusColor,
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: Text(
+                                      statusShortLabel,
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontSize: 11.5,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Ghi chú phỏng vấn: ${hrNote.isEmpty ? "Không có ghi chú thêm." : hrNote}',
+                                style: const TextStyle(fontSize: 12.5),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // 3. Thanh nút hành động dưới đáy
+                Container(
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 14),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: Colors.grey.withValues(alpha: 0.2),
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Đóng'),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.copy_rounded, size: 17),
+                          label: const FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text('Sao chép Biên bản'),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF565C43),
+                            foregroundColor: const Color(0xFFECEBE6),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _copyToClipboard(
+                              reportText,
+                              'Biên bản thẩm định HR',
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildReportSectionTitle(String title) {
+    return Text(
+      title,
+      style: const TextStyle(
+        fontSize: 11.5,
+        fontWeight: FontWeight.bold,
+        letterSpacing: 0.5,
+        color: Colors.blueGrey,
+      ),
+    );
+  }
+
+  Widget _buildReportCardContainer(
+    BuildContext ctx, {
+    required List<Widget> children,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Theme.of(ctx)
+            .colorScheme
+            .surfaceContainerHighest
+            .withValues(alpha: 0.28),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: Colors.blueGrey.withValues(alpha: 0.2),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: children,
+      ),
+    );
+  }
+
+  Widget _buildReportRow(String label, String value) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Expanded(
+          flex: 4,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.grey,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          flex: 6,
+          child: Text(
+            value,
+            textAlign: TextAlign.end,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   // [READ] Kiểm tra chứng chỉ đã có trong Sổ tay Sqflite chưa
@@ -179,6 +782,9 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
 
   // Giao diện Màn hình Dọc (Portrait - 1 Cột)
   Widget _buildPortraitLayout(BuildContext context, bool isValid) {
+    final isEmployer =
+        Provider.of<AuthProvider?>(context)?.currentUser?.isEmployer ?? false;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -187,6 +793,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
           _buildStatusHeader(isValid),
           const SizedBox(height: 16),
           _buildDetailsCard(context, isValid),
+          if (isEmployer) ...[
+            const SizedBox(height: 16),
+            _buildEmployerActionCard(context, isValid),
+          ],
           if (isValid) ...[
             const SizedBox(height: 16),
             _buildQrCertificateCard(context),
@@ -200,6 +810,9 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
 
   // Giao diện Màn hình Ngang (Landscape - Chia 2 Cột linh hoạt bằng Row + Expanded)
   Widget _buildLandscapeLayout(BuildContext context, bool isValid) {
+    final isEmployer =
+        Provider.of<AuthProvider?>(context)?.currentUser?.isEmployer ?? false;
+
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Row(
@@ -226,10 +839,141 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
           Expanded(
             flex: 6,
             child: SingleChildScrollView(
-              child: _buildDetailsCard(context, isValid),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  _buildDetailsCard(context, isValid),
+                  if (isEmployer) ...[
+                    const SizedBox(height: 16),
+                    _buildEmployerActionCard(context, isValid),
+                  ],
+                ],
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // Khối Nghiệp vụ Thẩm định Tuyển dụng dành riêng cho Nhà tuyển dụng (Employer / HR)
+  Widget _buildEmployerActionCard(BuildContext context, bool isValid) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.business_center_rounded, color: Colors.teal),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      'QUYẾT ĐỊNH THẨM ĐỊNH TUYỂN DỤNG (HR)',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13.5,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ),
+                ),
+                if (_hasSavedHrReview)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.teal.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Text(
+                      'Đã lưu HR',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ChoiceChip(
+                  label: const Text(
+                    'Đạt thẩm định',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  selected: _hrStatus == 'APPROVED',
+                  selectedColor: Colors.green.withValues(alpha: 0.22),
+                  onSelected: (_) => setState(() => _hrStatus = 'APPROVED'),
+                ),
+                ChoiceChip(
+                  label: const Text(
+                    'Chờ bổ sung',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  selected: _hrStatus == 'PENDING',
+                  selectedColor: Colors.orange.withValues(alpha: 0.22),
+                  onSelected: (_) => setState(() => _hrStatus = 'PENDING'),
+                ),
+                ChoiceChip(
+                  label: const Text(
+                    'Từ chối',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  selected: _hrStatus == 'REJECTED',
+                  selectedColor: Colors.redAccent.withValues(alpha: 0.22),
+                  onSelected: (_) => setState(() => _hrStatus = 'REJECTED'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _hrNoteController,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: 'Ghi chú phỏng vấn / Nhận xét của HR',
+                hintText:
+                    'VD: Bằng chính chủ, ứng viên đạt vòng thẩm định hồ sơ...',
+                isDense: true,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                ElevatedButton.icon(
+                  onPressed: _saveHrReview,
+                  icon: const Icon(Icons.task_alt_rounded, size: 18),
+                  label: const Text('Lưu Quyết định HR'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                  ),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () => _showHrAuditReportDialog(context),
+                  icon: const Icon(Icons.description_outlined, size: 18),
+                  label: const Text('Xuất Biên bản Thẩm định HR'),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
