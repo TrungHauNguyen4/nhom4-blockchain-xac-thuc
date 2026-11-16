@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Ứng dụng cần quyền truy cập Camera để quét mã QR xác thực văn bằng chứng chỉ.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Ứng dụng cần quyền truy cập Thư viện ảnh để chọn ảnh mã QR hoặc ảnh văn bằng cần kiểm định.</string>
 </dict>
 </plist>
