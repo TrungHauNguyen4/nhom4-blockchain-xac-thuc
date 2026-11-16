@@ -338,11 +338,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   controller: _orgController,
                   decoration: InputDecoration(
                     labelText: _selectedRole == UserRole.employer
-                        ? 'Tên Doanh nghiệp / Tổ chức tuyển dụng'
+                        ? 'Tên Doanh nghiệp / Tổ chức tuyển dụng *'
                         : 'Trường Đại học / Đơn vị đào tạo',
                     prefixIcon: const Icon(Icons.account_balance_outlined),
                     border: const OutlineInputBorder(),
                   ),
+                  validator: (val) {
+                    if (_selectedRole == UserRole.employer &&
+                        (val == null || val.trim().isEmpty)) {
+                      return 'Vui lòng nhập tên Doanh nghiệp / Tổ chức tuyển dụng';
+                    }
+                    return null;
+                  },
                 ),
                 const SizedBox(height: 24),
 
@@ -390,7 +397,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
       case UserRole.staff:
         return '🛡️ Cán bộ đào tạo: Có quyền chọn Ảnh/PDF ký số Blockchain và xuất mã QR văn bằng.';
       case UserRole.employer:
-        return '🏢 Nhà tuyển dụng: Quét QR hồ sơ ứng viên và lưu kết quả thẩm định offline.';
+        return '🏢 Nhà tuyển dụng: Quét QR hồ sơ ứng viên và lập biên bản thẩm định.';
       case UserRole.student:
       default:
         return '🎓 Sinh viên: Tra cứu bằng cấp, lưu trữ vào Sổ tay văn bằng và xuất trình offline.';

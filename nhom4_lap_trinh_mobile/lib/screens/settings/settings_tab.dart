@@ -118,6 +118,95 @@ class _SettingsTabState extends State<SettingsTab> {
     );
   }
 
+  void _promptRevertFromStaff(
+      BuildContext context, AuthProvider authProvider) {
+    final user = authProvider.currentUser;
+    if (user == null || !user.isStaff) return;
+
+    final String? savedOriginal =
+        (user.originalRole == UserRole.student ||
+                user.originalRole == UserRole.employer)
+            ? user.originalRole
+            : null;
+    String selectedRole = savedOriginal ?? UserRole.student;
+
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Text('Quay về vai trò ban đầu'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  savedOriginal != null
+                      ? 'Bạn sẽ chuyển tài khoản từ Cán bộ đào tạo về lại vai trò ${UserRole.getRoleLabel(savedOriginal)}.'
+                      : 'Tài khoản này chưa lưu vai trò trước khi nâng cấp. Vui lòng chọn vai trò ban đầu để quay về:',
+                  style: const TextStyle(fontSize: 13),
+                ),
+                if (savedOriginal == null) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Sinh viên'),
+                        selected: selectedRole == UserRole.student,
+                        onSelected: (_) => setDialogState(
+                          () => selectedRole = UserRole.student,
+                        ),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Nhà tuyển dụng'),
+                        selected: selectedRole == UserRole.employer,
+                        onSelected: (_) => setDialogState(
+                          () => selectedRole = UserRole.employer,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 10),
+                const Text(
+                  'Lưu ý: Sau khi quay về, nếu muốn chuyển lại lên Cán bộ đào tạo bạn sẽ phải nhập lại Mã ủy quyền.',
+                  style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('Hủy'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(dialogContext);
+                  final ok = await authProvider.revertFromStaff(
+                    fallbackRole: selectedRole,
+                  );
+                  if (!context.mounted) return;
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ok
+                            ? 'Đã chuyển về vai trò ${UserRole.getRoleLabel(selectedRole)}.'
+                            : 'Không thể chuyển về vai trò ban đầu.',
+                      ),
+                      backgroundColor: ok ? Colors.green : Colors.red,
+                    ),
+                  );
+                },
+                child: const Text('Xác nhận'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -285,28 +374,13 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 12),
-                const Divider(),
-                // Chế độ dùng thử
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  secondary: const Icon(Icons.cloud_off, color: Colors.orange),
-                  title: const Text('Chế độ dùng thử (Không cần máy chủ)',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                  subtitle: const Text('Dùng thử tính năng cấp bằng mẫu khi chưa bật máy tính'),
-                  value: ApiService.useMockWhenOffline,
-                  onChanged: (val) async {
-                    await ApiService.setMockMode(val);
-                    setState(() {});
-                  },
-                ),
               ],
             ),
           ),
         ),
         const SizedBox(height: 14),
 
-        // 4. TIỆN ÍCH CHUYỂN ĐỔI NHANH VAI TRÒ
+        // 4. PHÂN QUYỀN VAI TRÒ TÀI KHOẢN (Cố định SV/HR, giữ nguyên nâng cấp Cán bộ nhập mã)
         if (user != null)
           Card(
             color: theme.colorScheme.surfaceContainerHighest,
@@ -321,67 +395,46 @@ class _SettingsTabState extends State<SettingsTab> {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'Chuyển đổi nhanh vai trò sử dụng',
+                          'Vai trò tài khoản: ${UserRole.getRoleLabel(user.role)}',
                           style: TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 12,
+                            fontSize: 12.5,
                             color: theme.colorScheme.primary,
                           ),
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 6),
+                  Text(
+                    user.isStaff
+                        ? 'Tài khoản đang được ủy quyền Cán bộ đào tạo${(user.originalRole == UserRole.student || user.originalRole == UserRole.employer) ? ' (vai trò gốc: ${UserRole.getRoleLabel(user.originalRole)})' : ''}.'
+                        : 'Vai trò Sinh viên / Nhà tuyển dụng được cố định theo tài khoản để đảm bảo tính minh bạch.',
+                    style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 10),
                   SizedBox(
                     width: double.infinity,
-                    child: SegmentedButton<String>(
-                      showSelectedIcon: false,
-                      style: SegmentedButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                        padding: const EdgeInsets.symmetric(horizontal: 6),
-                      ),
-                      segments: const [
-                        ButtonSegment(
-                          value: UserRole.student,
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('Sinh Viên', style: TextStyle(fontSize: 11)),
-                          ),
-                          icon: Icon(Icons.school, size: 14),
-                        ),
-                        ButtonSegment(
-                          value: UserRole.employer,
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('Tuyển Dụng', style: TextStyle(fontSize: 11)),
-                          ),
-                          icon: Icon(Icons.business, size: 14),
-                        ),
-                        ButtonSegment(
-                          value: UserRole.staff,
-                          label: FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text('Cán Bộ', style: TextStyle(fontSize: 11)),
-                          ),
-                          icon: Icon(Icons.verified_user, size: 14),
-                        ),
-                      ],
-                      selected: {user.role},
-                      onSelectionChanged: (Set<String> newSelection) {
-                        final targetRole = newSelection.first;
-                        if (targetRole == UserRole.staff && !user.isStaff) {
-                          _promptStaffPasscode(context, authProvider);
-                        } else {
-                          authProvider.switchRoleForDemo(targetRole);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                  'Đã kích hoạt quyền: ${UserRole.getRoleLabel(targetRole)}'),
+                    child: user.isStaff
+                        ? OutlinedButton.icon(
+                            icon: const Icon(Icons.swap_horiz, size: 16),
+                            label: Text(
+                              (user.originalRole == UserRole.student ||
+                                      user.originalRole == UserRole.employer)
+                                  ? 'Quay về vai trò ${UserRole.getRoleLabel(user.originalRole)}'
+                                  : 'Quay về vai trò ban đầu (SV / NTD)',
                             ),
-                          );
-                        }
-                      },
-                    ),
+                            onPressed: () =>
+                                _promptRevertFromStaff(context, authProvider),
+                          )
+                        : OutlinedButton.icon(
+                            icon: const Icon(Icons.key_outlined, size: 16),
+                            label: const Text(
+                              'Nâng cấp lên Cán bộ (Nhập mã ủy quyền)',
+                            ),
+                            onPressed: () =>
+                                _promptStaffPasscode(context, authProvider),
+                          ),
                   ),
                 ],
               ),
@@ -390,18 +443,49 @@ class _SettingsTabState extends State<SettingsTab> {
         const SizedBox(height: 14),
 
         // 5. THÔNG TIN ỨNG DỤNG
-        const Card(
+        Card(
           child: Padding(
-            padding: EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Giới Thiệu Ứng Dụng (Nhóm 4)',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                SizedBox(height: 8),
-                Text('• Tra cứu văn bằng, chứng chỉ nhanh chóng qua mã QR hoặc tệp PDF/Ảnh.'),
-                Text('• Cấp phát văn bằng điện tử có chữ ký số chống làm giả.'),
-                Text('• Hỗ trợ lưu văn bằng về điện thoại để xuất trình ngay cả khi không có mạng.'),
+                Row(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: Image.asset(
+                        'assets/images/app_logo.png',
+                        width: 44,
+                        height: 44,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Giới Thiệu Ứng Dụng (Nhóm 4)',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Blockchain Signature • Xác thực văn bằng số',
+                            style: TextStyle(fontSize: 11.5, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                const Text('• Tra cứu văn bằng, chứng chỉ nhanh chóng qua mã QR hoặc tệp PDF/Ảnh.'),
+                const Text('• Cấp phát văn bằng điện tử có chữ ký số chống làm giả.'),
+                const Text('• Hỗ trợ lưu văn bằng về điện thoại để xuất trình ngay cả khi không có mạng.'),
               ],
             ),
           ),

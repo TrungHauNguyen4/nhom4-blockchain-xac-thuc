@@ -56,14 +56,14 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? const Color(0xFF282834).withValues(alpha: 0.80)
-                      : const Color(0xFFE8ECF2).withValues(alpha: 0.90),
+                      ? const Color(0xFF18181A).withValues(alpha: 0.90)
+                      : const Color(0xFFF7F6F2).withValues(alpha: 0.92),
                   borderRadius: BorderRadius.circular(999),
                   border: Border.all(
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.18)
-                        : Colors.white.withValues(alpha: 0.92),
-                    width: 1.2,
+                        ? Colors.white.withValues(alpha: 0.14)
+                        : const Color(0xFFD6D4CC),
+                    width: 1.1,
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -94,16 +94,16 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                               gradient: isDark
                                   ? const LinearGradient(
                                       colors: [
-                                        Color(0xFFFFFFFF),
-                                        Color(0xFFF3EFEA),
+                                        Color(0xFFECEBE6),
+                                        Color(0xFFDAD8D0),
                                       ],
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
                                     )
                                   : const LinearGradient(
                                       colors: [
-                                        Color(0xFF282A37),
-                                        Color(0xFF15161F),
+                                        Color(0xFF565C43),
+                                        Color(0xFF3E4230),
                                       ],
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
@@ -134,11 +134,12 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                             final isSelected = index == safeSelected;
                             final isPressed = _pressedIndex == index;
 
-                            final Color activeTextColor =
-                                isDark ? const Color(0xFF16161E) : Colors.white;
+                            final Color activeTextColor = isDark
+                                ? const Color(0xFF141416)
+                                : const Color(0xFFECEBE6);
                             final Color inactiveTextColor = isDark
-                                ? Colors.white.withValues(alpha: 0.72)
-                                : const Color(0xFF4A5060);
+                                ? const Color(0xFFECEBE6).withValues(alpha: 0.68)
+                                : const Color(0xFF5C5B57);
 
                             return Expanded(
                               child: GestureDetector(
@@ -320,11 +321,11 @@ class _GlassCardState extends State<GlassCard> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final defaultBg = isDark
-        ? const Color(0xFF222433).withValues(alpha: 0.78)
-        : Colors.white.withValues(alpha: 0.92);
+        ? const Color(0xFF18181A).withValues(alpha: 0.92)
+        : const Color(0xFFF7F6F2).withValues(alpha: 0.94);
     final defaultBorder = isDark
-        ? Colors.white.withValues(alpha: 0.12)
-        : Colors.white.withValues(alpha: 0.95);
+        ? Colors.white.withValues(alpha: 0.10)
+        : const Color(0xFFD6D4CC);
 
     return AnimatedScale(
       scale: _isPressed ? 0.975 : 1.0,
@@ -385,14 +386,14 @@ class GlassScaffoldBackground extends StatelessWidget {
           end: Alignment.bottomRight,
           colors: isDark
               ? const [
-                  Color(0xFF0F111A),
-                  Color(0xFF171A28),
-                  Color(0xFF121521),
+                  Color(0xFF0E0E10),
+                  Color(0xFF141416),
+                  Color(0xFF0E0E10),
                 ]
               : const [
-                  Color(0xFFF2F5FA),
-                  Color(0xFFE9EFF8),
-                  Color(0xFFF5F7FB),
+                  Color(0xFFECEBE6),
+                  Color(0xFFE5E3DC),
+                  Color(0xFFECEBE6),
                 ],
         ),
       ),

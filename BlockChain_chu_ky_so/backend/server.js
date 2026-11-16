@@ -102,14 +102,12 @@ app.post('/api/v1/notarize', notarizeLimiter, checkApiKey, async (req, res) => {
         // 1. Kiểm tra trong CSDL SQL Server trước
         const existingDB = await getNotaryByHash(dataHash);
         if (existingDB) {
-            console.log(`[Anti-Drain] Bỏ qua gửi transaction: Hash ${dataHash} đã có trong CSDL (Tx: ${existingDB.txHash})`);
-            return res.status(200).json({
-                success: true,
-                message: 'Văn bằng này đã được niêm phong hợp lệ từ trước (Đã bảo vệ ví, không tiêu tốn thêm Gas)!',
-                transactionHash: existingDB.txHash,
-                blockNumber: existingDB.blockNumber,
-                signerUsed: existingDB.signer,
-                data: existingDB
+            console.log(`[Anti-Drain] Từ chối ký trùng: Hash ${dataHash} đã có trong CSDL (Tx: ${existingDB.txHash})`);
+            return res.status(409).json({
+                success: false,
+                isDuplicate: true,
+                error: 'Tài liệu này đã được niêm phong từ trước trên hệ thống! Không thể ký lại với thông tin khác.',
+                existingRecord: existingDB
             });
         }
 
@@ -117,16 +115,13 @@ app.post('/api/v1/notarize', notarizeLimiter, checkApiKey, async (req, res) => {
         try {
             const onChainRecord = await contract.getRecord(dataHash);
             if (onChainRecord && onChainRecord.timestamp && Number(onChainRecord.timestamp) > 0) {
-                console.log(`[Anti-Drain] Bỏ qua gửi transaction: Hash ${dataHash} đã tồn tại On-Chain tại thời điểm ${onChainRecord.timestamp}`);
-                return res.status(200).json({
-                    success: true,
-                    message: 'Văn bằng này đã tồn tại trên Smart Contract Sepolia từ trước (Tiết kiệm 100% phí Gas)!',
-                    transactionHash: 'On-chain Verified',
-                    signerUsed: onChainRecord.signer,
-                    data: {
+                console.log(`[Anti-Drain] Từ chối ký trùng On-Chain: Hash ${dataHash} đã tồn tại tại thời điểm ${onChainRecord.timestamp}`);
+                return res.status(409).json({
+                    success: false,
+                    isDuplicate: true,
+                    error: 'Tài liệu này đã tồn tại trên Smart Contract Sepolia từ trước! Không thể ký lại.',
+                    existingRecord: {
                         dataHash,
-                        fileName: fileName || 'Văn bằng chứng chỉ',
-                        fileType: fileType || 'PDF',
                         signer: onChainRecord.signer,
                         timestamp: Number(onChainRecord.timestamp)
                     }

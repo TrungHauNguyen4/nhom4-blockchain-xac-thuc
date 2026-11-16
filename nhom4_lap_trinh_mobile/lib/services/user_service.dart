@@ -58,23 +58,15 @@ class UserService {
     );
   }
 
-  /// Kiểm tra xem UID có phải là tài khoản mẫu chấm thi (Demo) hay không
-  static bool isDemoUid(String uid) => uid.startsWith('demo_');
-
   // [CREATE / UPDATE] Lưu hoặc cập nhật hồ sơ người dùng lên Firebase Realtime Database & Bộ nhớ máy
   Future<bool> saveUserProfile(UserModel user) async {
     // 1. Luôn lưu vào SharedPreferences làm bộ nhớ đệm an toàn
     await _saveProfileLocally(user);
 
-    // 2. Nếu là tài khoản mẫu chấm thi (demo_...) thì tuyệt đối KHÔNG đẩy lên Firebase Realtime Database thật
-    if (isDemoUid(user.uid)) {
-      return true;
-    }
-
-    // 3. Đồng bộ tài khoản thật lên Firebase Realtime Database nếu có kết nối
+    // 2. Đồng bộ tài khoản lên Firebase Realtime Database bằng update() để giữ nguyên các nhánh phụ như activeSessionId
     if (_usersRef != null) {
       try {
-        await _usersRef!.child(user.uid).set(user.toMap());
+        await _usersRef!.child(user.uid).update(user.toMap());
         return true;
       } catch (e) {
         debugPrint('[UserService] Lỗi đồng bộ lên Firebase: $e');
@@ -83,30 +75,50 @@ class UserService {
     return true;
   }
 
-  // [CLEANUP] Tự động dọn dẹp các nhánh demo_... đã lỡ bị đẩy lên Firebase Realtime Database trước đó
-  Future<void> cleanupDemoNodesOnFirebase() async {
+  // [SINGLE SESSION] Ghi nhận phiên đăng nhập duy nhất của thiết bị hiện tại
+  Future<void> claimActiveSession(String uid, String sessionId) async {
     if (_usersRef == null) return;
-    const demoUids = [
-      'demo_staff_001',
-      'demo_employer_002',
-      'demo_student_003',
-    ];
-    for (final demoUid in demoUids) {
-      try {
-        await _usersRef!.child(demoUid).remove();
-      } catch (e) {
-        debugPrint('[UserService] Bỏ qua dọn dẹp $demoUid: $e');
+    try {
+      await _usersRef!.child(uid).update({
+        'activeSessionId': sessionId,
+        'sessionUpdatedAt': ServerValue.timestamp,
+      });
+    } catch (e) {
+      debugPrint('[UserService] Không thể cập nhật activeSessionId: $e');
+    }
+  }
+
+  // [SINGLE SESSION] Xóa activeSessionId khi người dùng chủ động đăng xuất trên thiết bị hiện tại
+  Future<void> clearActiveSessionIfMatch(String uid, String sessionId) async {
+    if (_usersRef == null) return;
+    try {
+      final snap = await _usersRef!.child(uid).child('activeSessionId').get();
+      if (snap.exists && snap.value?.toString() == sessionId) {
+        await _usersRef!.child(uid).child('activeSessionId').remove();
       }
+    } catch (e) {
+      debugPrint('[UserService] Lỗi dọn dẹp activeSessionId: $e');
+    }
+  }
+
+  // [SINGLE SESSION] Lắng nghe thay đổi activeSessionId theo thời gian thực
+  Stream<String?> watchActiveSession(String uid) {
+    if (_usersRef == null) return const Stream.empty();
+    try {
+      return _usersRef!.child(uid).child('activeSessionId').onValue.map((event) {
+        final val = event.snapshot.value;
+        if (val == null) return null;
+        final str = val.toString().trim();
+        return str.isEmpty ? null : str;
+      });
+    } catch (e) {
+      debugPrint('[UserService] Lỗi mở stream activeSessionId: $e');
+      return const Stream.empty();
     }
   }
 
   // [READ] Lấy thông tin hồ sơ của người dùng theo UID
   Future<UserModel?> getUserProfile(String uid) async {
-    // Nếu là tài khoản Demo thì đọc trực tiếp từ bộ nhớ máy
-    if (isDemoUid(uid)) {
-      return await _loadProfileLocally(uid);
-    }
-
     // 1. Thử lấy từ Firebase Realtime Database
     if (_usersRef != null) {
       try {
@@ -171,8 +183,8 @@ class UserService {
       debugPrint('[UserService] Lỗi xóa cache local: $e');
     }
 
-    // 2. Xóa khỏi Firebase Realtime Database nếu là tài khoản thật
-    if (_usersRef != null && !isDemoUid(uid)) {
+    // 2. Xóa khỏi Firebase Realtime Database
+    if (_usersRef != null) {
       try {
         await _usersRef!.child(uid).remove();
         return true;

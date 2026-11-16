@@ -3,11 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/certificate_record.dart';
+import 'certificate_firebase_service.dart';
 import 'db_service.dart';
 
 class ApiService {
   static const String _prefBaseUrlKey = 'server_base_url';
-  static const String _prefMockModeKey = 'use_mock_when_offline';
 
   // Địa chỉ Smart Contract công khai trên mạng lưới Ethereum Sepolia (SignedRecordRegistry.sol)
   // Chỉ dùng cho lệnh đọc công khai eth_call (view), hoàn toàn không chứa bất kỳ khóa bí mật nào!
@@ -31,10 +31,7 @@ class ApiService {
   static String baseUrl = defaultBaseUrl;
   static String apiKey = 'YOUR_SECRET_B2B_KEY_123';
 
-  // Công tắc giả lập phản hồi khi TV2 & TV3 code giao diện độc lập tại nhà (Mục 7.4 kehoach.md)
-  static bool useMockWhenOffline = false;
-
-  // [READ] Tải cấu hình địa chỉ IP Server & chế độ Mock từ SharedPreferences khi mở App
+  // [READ] Tải cấu hình địa chỉ IP Server từ SharedPreferences khi mở App
   static Future<void> loadSavedConfig() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -42,7 +39,6 @@ class ApiService {
       if (savedUrl != null && savedUrl.trim().isNotEmpty) {
         baseUrl = _normalizeUrl(savedUrl);
       }
-      useMockWhenOffline = prefs.getBool(_prefMockModeKey) ?? false;
     } catch (e) {
       debugPrint('[ApiService] Không thể đọc cấu hình SharedPreferences: $e');
     }
@@ -68,17 +64,6 @@ class ApiService {
     }
   }
 
-  // [UPDATE] Bật/tắt chế độ Mock Offline hỗ trợ phát triển độc lập
-  static Future<void> setMockMode(bool enabled) async {
-    useMockWhenOffline = enabled;
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(_prefMockModeKey, enabled);
-    } catch (e) {
-      debugPrint('[ApiService] Không thể lưu trạng thái mock: $e');
-    }
-  }
-
   static String _normalizeUrl(String rawUrl) {
     final trimmed = rawUrl.trim();
     if (trimmed.isEmpty) return defaultBaseUrl;
@@ -97,27 +82,6 @@ class ApiService {
     String fileName = 'Văn bằng kiểm tra',
   }) async {
     final cleanHash = hash.trim();
-
-    if (useMockWhenOffline) {
-      await Future.delayed(const Duration(milliseconds: 600));
-      if (!cleanHash.startsWith('0x') || cleanHash.length != 66) {
-        return null;
-      }
-      return CertificateRecord(
-        id: 1,
-        dataHash: cleanHash,
-        signer: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        fileName: fileName,
-        fileType: fileName.toLowerCase().endsWith('.pdf') ? 'PDF' : 'IMAGE',
-        txHash: '0x9f8e7d6c5b4a392817263544556677889900aabbccddeeff1122334455667788',
-        blockNumber: 6912045,
-        studentName: 'Nguyễn Văn An (Mock)',
-        studentCode: 'SV2026001',
-        degreeName: 'Bằng Kỹ sư Công nghệ Thông tin',
-        issuerName: 'Phòng Đào Tạo (Chế độ Mock)',
-      );
-    }
 
     // Chuẩn hóa định dạng 0x + 64 ký tự hex (bytes32)
     final normalizedHash =
@@ -234,6 +198,10 @@ class ApiService {
           await DatabaseService.instance.getCertificateByHash(normalizedHash);
     } catch (_) {}
 
+    // Nếu máy hiện tại chưa từng lưu văn bằng này vào SQLite, thử đọc Metadata từ Firebase Realtime Database (/certificates)
+    cachedLocal ??=
+        await CertificateFirebaseService().getMetadataByHash(normalizedHash);
+
     Object? lastError;
     for (final rpcUrl in publicSepoliaRpcUrls) {
       try {
@@ -281,32 +249,6 @@ class ApiService {
     String? issuerName,
     String? createdByEmail,
   }) async {
-    if (useMockWhenOffline) {
-      await Future.delayed(const Duration(milliseconds: 900));
-      const mockTxHash =
-          '0xabc123def4567890abc123def4567890abc123def4567890abc123def4567890';
-      return {
-        'success': true,
-        'message': 'Đã lưu giả lập (Chế độ Mock Offline)',
-        'transactionHash': mockTxHash,
-        'blockNumber': 6912099,
-        'signerUsed': '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-        'data': {
-          'dataHash': dataHash,
-          'fileName': fileName,
-          'fileType': fileType,
-          'transactionHash': mockTxHash,
-          'blockNumber': 6912099,
-          'studentName': studentName,
-          'studentCode': studentCode,
-          'degreeName': degreeName,
-          'issuerName': issuerName ?? 'Phòng Đào Tạo',
-          'signer': '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-          'timestamp': DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        },
-      };
-    }
-
     try {
       final url = Uri.parse('$baseUrl/api/v1/notarize');
       final response = await http
@@ -330,6 +272,29 @@ class ApiService {
           .timeout(const Duration(seconds: 60));
 
       final Map<String, dynamic> body = jsonDecode(response.body);
+      if (response.statusCode == 409 || body['isDuplicate'] == true) {
+        return {
+          'success': false,
+          'isDuplicate': true,
+          'error': body['error'] ??
+              'Tài liệu này đã được niêm phong từ trước trên hệ thống!',
+          if (body['existingRecord'] != null)
+            'existingRecord': body['existingRecord'],
+        };
+      }
+      if (body['success'] == true && body['isDuplicate'] != true) {
+        await _syncNotarizedMetadataToFirebase(
+          body: body,
+          dataHash: dataHash,
+          fileName: fileName,
+          fileType: fileType,
+          studentName: studentName,
+          studentCode: studentCode,
+          degreeName: degreeName,
+          issuerName: issuerName,
+          createdByEmail: createdByEmail,
+        );
+      }
       return body;
     } catch (e) {
       return {
@@ -380,12 +345,85 @@ class ApiService {
           await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamedRes);
       final Map<String, dynamic> body = jsonDecode(response.body);
+      if (response.statusCode == 409 || body['isDuplicate'] == true) {
+        return {
+          'success': false,
+          'isDuplicate': true,
+          'error': body['error'] ??
+              'Tài liệu này đã được niêm phong từ trước trên hệ thống!',
+          if (body['existingRecord'] != null)
+            'existingRecord': body['existingRecord'],
+        };
+      }
+      if (body['success'] == true && body['isDuplicate'] != true) {
+        final returnedHash =
+            (body['data']?['dataHash'] ?? body['dataHash'] ?? '').toString();
+        if (returnedHash.isNotEmpty) {
+          await _syncNotarizedMetadataToFirebase(
+            body: body,
+            dataHash: returnedHash,
+            fileName: fileName,
+            fileType: fileType ?? 'PDF',
+            studentName: studentName,
+            studentCode: studentCode,
+            degreeName: degreeName,
+            issuerName: issuerName,
+            createdByEmail: createdByEmail,
+          );
+        }
+      }
       return body;
     } catch (e) {
       return {
         'success': false,
         'error': 'Lỗi tải file lên máy chủ: $e',
       };
+    }
+  }
+
+  /// Đồng bộ Metadata văn bằng lên Firebase Realtime Database (/certificates)
+  /// ngay sau khi Backend xác nhận ghi thành công lên Ethereum Sepolia & SQL Server.
+  Future<void> _syncNotarizedMetadataToFirebase({
+    required Map<String, dynamic> body,
+    required String dataHash,
+    required String fileName,
+    required String fileType,
+    String? studentName,
+    String? studentCode,
+    String? degreeName,
+    String? issuerName,
+    String? createdByEmail,
+  }) async {
+    try {
+      final dataMap = body['data'] is Map
+          ? Map<String, dynamic>.from(body['data'] as Map)
+          : const <String, dynamic>{};
+
+      final record = CertificateRecord(
+        dataHash: dataHash,
+        signer: (body['signerUsed'] ?? dataMap['signer'] ?? '').toString(),
+        timestamp: dataMap['timestamp'] is int
+            ? dataMap['timestamp'] as int
+            : DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        fileName: fileName,
+        fileType: fileType,
+        txHash: (body['transactionHash'] ?? dataMap['transactionHash'])
+            ?.toString(),
+        blockNumber: body['blockNumber'] is int
+            ? body['blockNumber'] as int
+            : int.tryParse(body['blockNumber']?.toString() ?? ''),
+        studentName: studentName,
+        studentCode: studentCode,
+        degreeName: degreeName,
+        issuerName: issuerName,
+      );
+
+      await CertificateFirebaseService().saveCertificateMetadata(
+        record,
+        createdByEmail: createdByEmail,
+      );
+    } catch (e) {
+      debugPrint('[ApiService] Lỗi đồng bộ metadata lên Firebase: $e');
     }
   }
 
@@ -396,28 +434,6 @@ class ApiService {
   Future<List<CertificateRecord>> fetchIssuedCertificates({
     String keyword = '',
   }) async {
-    if (useMockWhenOffline) {
-      await Future.delayed(const Duration(milliseconds: 400));
-      return [
-        CertificateRecord(
-          id: 1,
-          dataHash:
-              '0x1111222233334444555566667777888899990000aaaabbbbccccddddeeeeffff',
-          signer: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
-          timestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-          fileName: 'Bang_Tot_Nghiep_CNTT.pdf',
-          fileType: 'PDF',
-          txHash:
-              '0x9f8e7d6c5b4a392817263544556677889900aabbccddeeff1122334455667788',
-          blockNumber: 6912045,
-          studentName: 'Nguyễn Văn An (Mock)',
-          studentCode: 'SV2026001',
-          degreeName: 'Bằng Kỹ sư Công nghệ Thông tin',
-          issuerName: 'Phòng Đào Tạo',
-        ),
-      ];
-    }
-
     try {
       final queryParam = keyword.trim().isNotEmpty
           ? '?q=${Uri.encodeComponent(keyword.trim())}'
@@ -440,8 +456,13 @@ class ApiService {
       }
     } catch (e) {
       debugPrint(
-        '[ApiService] Không kết nối được SQL Server ($e) -> Đọc danh sách dự phòng từ Sổ tay Sqflite!',
+        '[ApiService] Không kết nối được SQL Server ($e) -> Thử đọc danh sách từ Firebase Realtime Database!',
       );
+      final firebaseList = await CertificateFirebaseService()
+          .fetchAllCertificates(keyword: keyword);
+      if (firebaseList.isNotEmpty) {
+        return firebaseList;
+      }
       try {
         return await DatabaseService.instance.searchCertificates(keyword);
       } catch (_) {}
@@ -453,7 +474,6 @@ class ApiService {
   // API 4: Kiểm tra kết nối tới Server Backend (/health) & Sepolia On-Chain RPC
   // ========================================================
   Future<bool> checkServerHealth() async {
-    if (useMockWhenOffline) return true;
     try {
       final url = Uri.parse('$baseUrl/health');
       final res = await http.get(url).timeout(const Duration(seconds: 3));

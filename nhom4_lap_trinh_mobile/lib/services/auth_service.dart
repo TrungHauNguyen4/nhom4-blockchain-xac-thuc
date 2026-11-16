@@ -90,19 +90,7 @@ class AuthService {
         throw 'Không thể kết nối dịch vụ xác thực: $e';
       }
     } else {
-      // Chế độ Offline Fallback khi chưa cấu hình Firebase
-      final mockUid = 'mock_uid_${email.hashCode.abs()}';
-      final newUser = UserModel(
-        uid: mockUid,
-        name: name.trim(),
-        email: email.trim(),
-        role: role,
-        organization: organization.trim(),
-        studentCode: studentCode.trim(),
-        createdAt: now,
-      );
-      await _userService.saveUserProfile(newUser);
-      return newUser;
+      throw 'Dịch vụ xác thực Firebase chưa sẵn sàng. Vui lòng kiểm tra kết nối mạng.';
     }
   }
 
@@ -114,11 +102,6 @@ class AuthService {
     required String password,
   }) async {
     final cleanEmail = email.trim().toLowerCase();
-
-    // Hỗ trợ Tài khoản Demo nhanh phục vụ bảo vệ đồ án / chấm thi
-    if (_isDemoAccount(cleanEmail)) {
-      return _getDemoUser(cleanEmail);
-    }
 
     if (_auth != null) {
       try {
@@ -149,20 +132,7 @@ class AuthService {
         throw 'Lỗi đăng nhập: $e';
       }
     } else {
-      // Fallback offline nếu Firebase chưa sẵn sàng
-      final mockUid = 'mock_uid_${cleanEmail.hashCode.abs()}';
-      var profile = await _userService.getUserProfile(mockUid);
-      if (profile == null) {
-        profile = UserModel(
-          uid: mockUid,
-          name: cleanEmail.split('@').first,
-          email: cleanEmail,
-          role: UserRole.student,
-          createdAt: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
-        );
-        await _userService.saveUserProfile(profile);
-      }
-      return profile;
+      throw 'Dịch vụ xác thực Firebase chưa sẵn sàng. Vui lòng kiểm tra kết nối mạng.';
     }
   }
 
@@ -233,10 +203,6 @@ class AuthService {
     final cleanEmail = email.trim().toLowerCase();
     if (cleanEmail.isEmpty) {
       throw 'Vui lòng nhập địa chỉ email.';
-    }
-
-    if (_isDemoAccount(cleanEmail)) {
-      throw 'Đây là tài khoản mẫu chấm thi, mật khẩu cố định là: 123456';
     }
 
     if (_auth != null) {
@@ -345,48 +311,5 @@ class AuthService {
       }
     }
     return error.toString();
-  }
-
-  // ========================================================
-  // HỖ TRỢ TÀI KHOẢN DEMO SẴN CHO 3 VAI TRÒ
-  // Giúp Thầy/Cô chấm điểm chuyển đổi 3 vai trò ngay lập tức!
-  // ========================================================
-  bool _isDemoAccount(String email) {
-    return email == 'canbo@edu.vn' ||
-        email == 'doanhnghiep@company.com' ||
-        email == 'sinhvien@edu.vn';
-  }
-
-  UserModel _getDemoUser(String email) {
-    final now = DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now());
-    if (email == 'canbo@edu.vn') {
-      return UserModel(
-        uid: 'demo_staff_001',
-        name: 'ThS. Nguyễn Văn Quản (Cán Bộ Đào Tạo)',
-        email: 'canbo@edu.vn',
-        role: UserRole.staff,
-        organization: 'Trường Đại học Công nghệ TP.HCM',
-        createdAt: now,
-      );
-    } else if (email == 'doanhnghiep@company.com') {
-      return UserModel(
-        uid: 'demo_employer_002',
-        name: 'Trần Thị Tuyển Dụng (HR Manager)',
-        email: 'doanhnghiep@company.com',
-        role: UserRole.employer,
-        organization: 'Tập đoàn Công nghệ FPT',
-        createdAt: now,
-      );
-    } else {
-      return UserModel(
-        uid: 'demo_student_003',
-        name: 'Lê Hoàng Sinh Viên',
-        email: email,
-        role: UserRole.student,
-        organization: 'Khoa Công nghệ Thông tin',
-        studentCode: '20261104',
-        createdAt: now,
-      );
-    }
   }
 }

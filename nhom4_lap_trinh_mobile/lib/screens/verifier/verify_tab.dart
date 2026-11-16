@@ -106,17 +106,18 @@ class _VerifyTabState extends State<VerifyTab> {
     }
   }
 
-  // Tính toán mã băm Keccak-256 & SHA-256 trên RAM và kích hoạt StreamBuilder
-  void _processBytesVerification(Uint8List bytes, String fileName) {
-    final keccakHash = HashService.keccak256FromBytes(bytes);
-    final sha256Hash = HashService.sha256FromBytes(bytes);
+  // Tính toán mã băm Keccak-256 & SHA-256 duy nhất 1 lần trên Isolate nền và kích hoạt StreamBuilder
+  Future<void> _processBytesVerification(
+      Uint8List bytes, String fileName) async {
+    final hashes = await HashService.computeBothHashesAsync(bytes);
+    if (!mounted) return;
 
     setState(() {
       _selectedFileName = fileName;
       _selectedFileSize = bytes.lengthInBytes;
-      _computedKeccak256 = keccakHash;
-      _computedSha256 = sha256Hash;
-      _hashInputController.text = keccakHash;
+      _computedKeccak256 = hashes.keccak256;
+      _computedSha256 = hashes.sha256;
+      _hashInputController.text = hashes.keccak256;
       _currentScanMethod = 'FILE';
       _currentScanFileName = fileName;
       _lastLoggedHashAndTime = null;
@@ -124,6 +125,8 @@ class _VerifyTabState extends State<VerifyTab> {
       _verificationStream = _verifyFileWithOfflineFallback(
         fileBytes: bytes,
         fileName: fileName,
+        precomputedKeccak256: hashes.keccak256,
+        precomputedSha256: hashes.sha256,
       );
     });
   }
@@ -189,27 +192,28 @@ class _VerifyTabState extends State<VerifyTab> {
     });
   }
 
-  // Bọc luồng verifyFileStream kèm đối chiếu Sổ tay lưu trên máy (kiểm tra cả Keccak-256 & SHA-256)
+  // Bọc luồng verifyFileStream kèm đối chiếu Sổ tay lưu trên máy (tái sử dụng hash đã tính)
   Stream<VerificationProgress> _verifyFileWithOfflineFallback({
     required Uint8List fileBytes,
     required String fileName,
+    required String precomputedKeccak256,
+    required String precomputedSha256,
   }) async* {
-    final keccakHash = HashService.keccak256FromBytes(fileBytes);
-    final sha256Hash = HashService.sha256FromBytes(fileBytes);
-
     await for (final progress in HashService.verifyFileStream(
       fileBytes: fileBytes,
       fileName: fileName,
       apiService: _apiService,
+      precomputedKeccak256: precomputedKeccak256,
+      precomputedSha256: precomputedSha256,
     )) {
       if (progress.step == VerificationStep.error ||
           progress.step == VerificationStep.verifiedInvalid) {
         CertificateRecord? offlineCert;
         try {
-          offlineCert =
-              await DatabaseService.instance.getCertificateByHash(keccakHash);
-          offlineCert ??=
-              await DatabaseService.instance.getCertificateByHash(sha256Hash);
+          offlineCert = await DatabaseService.instance
+              .getCertificateByHash(precomputedKeccak256);
+          offlineCert ??= await DatabaseService.instance
+              .getCertificateByHash(precomputedSha256);
         } catch (_) {}
         if (offlineCert != null && offlineCert.isValid) {
           yield VerificationProgress(
@@ -443,11 +447,8 @@ class _VerifyTabState extends State<VerifyTab> {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
           colors: isDark
-              ? const [Color(0xFF1E293B), Color(0xFF0F172A)]
-              : [
-                  Theme.of(context).colorScheme.primary,
-                  const Color(0xFF0D9488),
-                ],
+              ? const [Color(0xFF18181A), Color(0xFF24271C)]
+              : const [Color(0xFF565C43), Color(0xFF2E3224)],
         ),
         borderRadius: BorderRadius.circular(22),
         border: Border.all(

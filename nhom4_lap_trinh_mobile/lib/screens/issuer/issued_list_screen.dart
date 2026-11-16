@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/certificate_record.dart';
 import '../../services/api_service.dart';
+import '../../services/certificate_firebase_service.dart';
 
 /// Màn hình Danh sách Văn bằng đã cấp phát (Đọc từ SQL Server Backend)
 /// Sử dụng FutureBuilder theo chuẩn Chương 12 (flutter_demo)
@@ -17,6 +18,7 @@ class IssuedListScreen extends StatefulWidget {
 class _IssuedListScreenState extends State<IssuedListScreen> {
   final TextEditingController _searchController = TextEditingController();
   late Future<List<CertificateRecord>> _certificatesFuture;
+  bool _isSyncingToFirebase = false;
 
   @override
   void initState() {
@@ -35,6 +37,45 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
     setState(() {
       _certificatesFuture = apiService.fetchIssuedCertificates(keyword: keyword);
     });
+  }
+
+  Future<void> _syncAllToFirebase() async {
+    if (_isSyncingToFirebase) return;
+
+    setState(() => _isSyncingToFirebase = true);
+    try {
+      final apiService = context.read<ApiService>();
+      final records = await apiService.fetchIssuedCertificates();
+      if (!mounted) return;
+
+      if (records.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Không có văn bằng nào để đồng bộ lên Firebase.'),
+          ),
+        );
+        return;
+      }
+
+      final syncedCount =
+          await CertificateFirebaseService().syncCertificatesBatch(records);
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: syncedCount > 0 ? Colors.teal : Colors.orange,
+          content: Text(
+            syncedCount > 0
+                ? 'Đã đồng bộ $syncedCount/${records.length} văn bằng lên Firebase Cloud!'
+                : 'Không thể ghi lên Firebase (kiểm tra mạng hoặc Realtime Database Rules).',
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSyncingToFirebase = false);
+      }
+    }
   }
 
   void _showCertificateDetailModal(CertificateRecord item) {
@@ -156,6 +197,22 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Sổ Bộ Văn Bằng Đã Ký'),
+        actions: [
+          IconButton(
+            tooltip: 'Đồng bộ văn bằng cũ lên Firebase Cloud',
+            icon: _isSyncingToFirebase
+                ? const SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  )
+                : const Icon(Icons.cloud_upload_outlined),
+            onPressed: _isSyncingToFirebase ? null : _syncAllToFirebase,
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -293,8 +350,8 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
       elevation: 2,
       child: ListTile(
         leading: CircleAvatar(
-          backgroundColor: const Color(0xFF673AB7).withValues(alpha: 0.15),
-          child: const Icon(Icons.verified, color: Color(0xFF673AB7)),
+          backgroundColor: const Color(0xFF565C43).withValues(alpha: 0.2),
+          child: const Icon(Icons.verified, color: Color(0xFF8E9773)),
         ),
         title: FittedBox(
           fit: BoxFit.scaleDown,

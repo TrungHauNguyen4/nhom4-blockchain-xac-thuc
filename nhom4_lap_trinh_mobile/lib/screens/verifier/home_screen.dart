@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/glass_widgets.dart';
 import '../auth/profile_screen.dart';
+import '../employer/employer_audit_tab.dart';
 import '../issuer/issue_certificate_screen.dart';
 import '../issuer/issued_list_screen.dart';
 import '../settings/settings_tab.dart';
@@ -15,12 +16,14 @@ import 'verify_tab.dart';
 class HomeScreen extends StatefulWidget {
   final String? userRole;
   final Widget? issuerTab;
+  final Widget? employerTab;
   final Widget? settingsTab;
 
   const HomeScreen({
     super.key,
     this.userRole,
     this.issuerTab,
+    this.employerTab,
     this.settingsTab,
   });
 
@@ -31,23 +34,32 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
   final GlobalKey<VaultTabState> _vaultKey = GlobalKey<VaultTabState>();
+  final GlobalKey<EmployerAuditTabState> _employerAuditKey =
+      GlobalKey<EmployerAuditTabState>();
 
   @override
   Widget build(BuildContext context) {
     final authProvider = Provider.of<AuthProvider?>(context);
     final user = authProvider?.currentUser;
     final bool isStaff = (user?.isStaff ?? false) || widget.userRole == 'staff';
+    final bool isEmployer =
+        !isStaff && ((user?.isEmployer ?? false) || widget.userRole == 'employer');
 
-    // Danh sách màn hình linh hoạt theo vai trò (Cán bộ đào tạo mở khóa thêm Tab Cấp bằng)
+    // Danh sách màn hình linh hoạt theo vai trò:
+    // - Cán bộ đào tạo (staff): mở khóa Tab "Cấp bằng"
+    // - Nhà tuyển dụng (employer): mở khóa Tab "Thẩm định HR"
     final List<Widget> pages = [
       VerifyTab(
         onVaultUpdated: () {
           _vaultKey.currentState?.reloadData();
+          _employerAuditKey.currentState?.reloadAuditData();
         },
       ),
       VaultTab(key: _vaultKey),
       if (isStaff)
         widget.issuerTab ?? const IssueCertificateScreen(isEmbedded: true),
+      if (isEmployer)
+        widget.employerTab ?? EmployerAuditTab(key: _employerAuditKey),
       widget.settingsTab ?? const SettingsTab(),
     ];
 
@@ -68,6 +80,12 @@ class _HomeScreenState extends State<HomeScreen> {
           selectedIcon: Icons.workspace_premium,
           label: 'Cấp bằng',
         ),
+      if (isEmployer)
+        const GlassNavItem(
+          icon: Icons.business_center_outlined,
+          selectedIcon: Icons.business_center_rounded,
+          label: 'Thẩm định HR',
+        ),
       const GlassNavItem(
         icon: Icons.settings_outlined,
         selectedIcon: Icons.settings,
@@ -76,6 +94,8 @@ class _HomeScreenState extends State<HomeScreen> {
     ];
 
     final int safeIndex = _currentTabIndex >= pages.length ? 0 : _currentTabIndex;
+    final String currentTitle =
+        _getTitleForTab(safeIndex, isStaff: isStaff, isEmployer: isEmployer);
 
     return Scaffold(
       appBar: AppBar(
@@ -89,10 +109,10 @@ class _HomeScreenState extends State<HomeScreen> {
               switchInCurve: Curves.easeOutCubic,
               switchOutCurve: Curves.easeInCubic,
               child: FittedBox(
-                key: ValueKey<String>(_getTitleForTab(safeIndex, isStaff)),
+                key: ValueKey<String>(currentTitle),
                 fit: BoxFit.scaleDown,
                 child: Text(
-                  _getTitleForTab(safeIndex, isStaff),
+                  currentTitle,
                   style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                 ),
               ),
@@ -126,6 +146,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 );
               },
+            ),
+          if (isEmployer && safeIndex == 2)
+            IconButton(
+              tooltip: 'Làm mới bảng thẩm định HR',
+              icon: const Icon(Icons.refresh),
+              onPressed: () => _employerAuditKey.currentState?.reloadAuditData(),
             ),
           if (authProvider != null)
             IconButton(
@@ -164,6 +190,8 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() => _currentTabIndex = index);
           if (index == 1) {
             _vaultKey.currentState?.reloadData();
+          } else if (isEmployer && index == 2) {
+            _employerAuditKey.currentState?.reloadAuditData();
           }
         },
         items: navItems,
@@ -184,7 +212,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  String _getTitleForTab(int index, bool isStaff) {
+  String _getTitleForTab(
+    int index, {
+    required bool isStaff,
+    required bool isEmployer,
+  }) {
     if (isStaff) {
       switch (index) {
         case 0:
@@ -193,6 +225,19 @@ class _HomeScreenState extends State<HomeScreen> {
           return 'Sổ Tay & Lịch Sử Đã Lưu';
         case 2:
           return 'Cấp Phát Văn Bằng Mới';
+        case 3:
+          return 'Cài Đặt Ứng Dụng';
+        default:
+          return 'Xác Thực Văn Bằng';
+      }
+    } else if (isEmployer) {
+      switch (index) {
+        case 0:
+          return 'Tra Cứu & Xác Thực Văn Bằng';
+        case 1:
+          return 'Sổ Tay & Lịch Sử Đã Lưu';
+        case 2:
+          return 'Trung Tâm Thẩm Định HR';
         case 3:
           return 'Cài Đặt Ứng Dụng';
         default:
