@@ -56,6 +56,9 @@ class _PublicPortfolioScreenState extends State<PublicPortfolioScreen> {
     try {
       if (code.isNotEmpty) {
         loadedUser = await _userService.getPublicPortfolioByStudentCode(code);
+        if (loadedUser == null && name.isNotEmpty) {
+          loadedUser = await _userService.getPublicPortfolioByName(name);
+        }
         final allMatching = await _firebaseService.fetchAllCertificates(
           keyword: code,
         );
@@ -65,6 +68,7 @@ class _PublicPortfolioScreenState extends State<PublicPortfolioScreen> {
         }).toList();
         certs = _mergeUniqueCertificates(widget.record, filtered);
       } else if (name.isNotEmpty) {
+        loadedUser = await _userService.getPublicPortfolioByName(name);
         final allMatching = await _firebaseService.fetchAllCertificates(
           keyword: name,
         );
