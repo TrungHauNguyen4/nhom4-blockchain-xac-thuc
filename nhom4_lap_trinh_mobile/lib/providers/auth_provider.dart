@@ -362,6 +362,15 @@ class AuthProvider extends ChangeNotifier {
     return ok;
   }
 
+  /// Bật / Tắt chế độ công khai Portfolio cho người khác xem khi quét văn bằng
+  Future<bool> setPortfolioVisibility(bool isPublic) async {
+    if (_currentUser == null) return false;
+    final updated = _currentUser!.copyWith(isPortfolioPublic: isPublic);
+    _currentUser = updated;
+    notifyListeners();
+    return _userService.saveUserProfile(updated);
+  }
+
   /// Người dùng chọn "Để sau" khi đăng nhập Gmail lần đầu -> không hiện lại popup nữa
   Future<void> dismissFirstTimeOnboarding() async {
     if (_currentUser == null || _currentUser!.isProfileCompleted) return;
@@ -380,6 +389,7 @@ class AuthProvider extends ChangeNotifier {
     final ok = await _userService.updateAvatar(_currentUser!.uid, base64);
     if (ok) {
       _currentUser = _currentUser!.copyWith(avatarBase64OrUrl: base64);
+      await _userService.syncPublicPortfolio(_currentUser!);
       notifyListeners();
     }
     return ok;

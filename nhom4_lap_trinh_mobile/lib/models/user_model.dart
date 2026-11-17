@@ -67,6 +67,7 @@ class UserModel {
   final String phone; // Số điện thoại liên hệ
   final String portfolioUrl; // Liên kết GitHub / LinkedIn / Website
   final bool isProfileCompleted; // Đã hoàn tất bổ sung thông tin lần đầu
+  final bool isPortfolioPublic; // Cho phép người khác xem Portfolio khi quét văn bằng
   final String createdAt;
 
   const UserModel({
@@ -83,6 +84,7 @@ class UserModel {
     this.phone = '',
     this.portfolioUrl = '',
     this.isProfileCompleted = true,
+    this.isPortfolioPublic = false,
     required this.createdAt,
   });
 
@@ -114,6 +116,7 @@ class UserModel {
       'phone': phone,
       'portfolioUrl': portfolioUrl,
       'isProfileCompleted': isProfileCompleted,
+      'isPortfolioPublic': isPortfolioPublic,
       'createdAt': createdAt,
     };
   }
@@ -137,6 +140,9 @@ class UserModel {
       isProfileCompleted: map['isProfileCompleted'] is bool
           ? map['isProfileCompleted'] as bool
           : org.trim().isNotEmpty,
+      isPortfolioPublic: map['isPortfolioPublic'] is bool
+          ? map['isPortfolioPublic'] as bool
+          : false,
       createdAt: (map['createdAt'] ?? '').toString(),
     );
   }
@@ -161,6 +167,7 @@ class UserModel {
     String? phone,
     String? portfolioUrl,
     bool? isProfileCompleted,
+    bool? isPortfolioPublic,
     String? createdAt,
   }) {
     return UserModel(
@@ -177,6 +184,7 @@ class UserModel {
       phone: phone ?? this.phone,
       portfolioUrl: portfolioUrl ?? this.portfolioUrl,
       isProfileCompleted: isProfileCompleted ?? this.isProfileCompleted,
+      isPortfolioPublic: isPortfolioPublic ?? this.isPortfolioPublic,
       createdAt: createdAt ?? this.createdAt,
     );
   }

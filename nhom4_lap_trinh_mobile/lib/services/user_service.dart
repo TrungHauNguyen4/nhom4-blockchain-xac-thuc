@@ -10,17 +10,28 @@ class UserService {
   static const String _userCachePrefix = 'user_profile_cache_';
   DatabaseReference? _usersRef;
   DatabaseReference? _configRef;
+  DatabaseReference? _publicPortfoliosRef;
 
   UserService() {
     try {
       final rootRef = FirebaseDatabase.instance.ref();
       _usersRef = rootRef.child('users');
       _configRef = rootRef.child('system_config');
+      _publicPortfoliosRef = rootRef.child('public_portfolios');
     } catch (e) {
       debugPrint('[UserService] Firebase Realtime Database chưa kết nối: $e');
       _usersRef = null;
       _configRef = null;
+      _publicPortfoliosRef = null;
     }
+  }
+
+  /// Chuẩn hóa MSSV làm khóa an toàn trên Firebase Realtime Database
+  static String normalizeStudentKey(String studentCode) {
+    return studentCode
+        .trim()
+        .toUpperCase()
+        .replaceAll(RegExp(r'[\s.#$\[\]/]+'), '_');
   }
 
   /// Kiểm tra Mã ủy quyền Cán bộ động từ nhánh `/system_config/staff_passcode_sha256` trên Firebase Realtime Database
@@ -67,12 +78,76 @@ class UserService {
     if (_usersRef != null) {
       try {
         await _usersRef!.child(user.uid).update(user.toMap());
+        await syncPublicPortfolio(user);
         return true;
       } catch (e) {
         debugPrint('[UserService] Lỗi đồng bộ lên Firebase: $e');
       }
     }
     return true;
+  }
+
+  /// Đồng bộ thông tin Portfolio công khai (ẩn số điện thoại) theo MSSV lên /public_portfolios.
+  /// Nếu người dùng tắt công khai (`isPortfolioPublic == false`), xóa sạch thông tin cá nhân khỏi nhánh công khai.
+  Future<void> syncPublicPortfolio(UserModel user) async {
+    if (_publicPortfoliosRef == null) return;
+    final key = normalizeStudentKey(user.studentCode);
+    if (key.isEmpty) return;
+
+    try {
+      if (!user.isPortfolioPublic) {
+        await _publicPortfoliosRef!.child(key).set(<String, dynamic>{
+          'ownerUid': user.uid,
+          'studentCode': user.studentCode.trim(),
+          'isPortfolioPublic': false,
+          'updatedAt': ServerValue.timestamp,
+        }).timeout(const Duration(seconds: 4));
+        return;
+      }
+
+      await _publicPortfoliosRef!.child(key).set(<String, dynamic>{
+        'ownerUid': user.uid,
+        'name': user.name,
+        'email': user.email,
+        'avatarBase64OrUrl': user.avatarBase64OrUrl,
+        'role': user.role,
+        'organization': user.organization,
+        'studentCode': user.studentCode.trim(),
+        'headline': user.headline,
+        'bio': user.bio,
+        'portfolioUrl': user.portfolioUrl,
+        'isPortfolioPublic': true,
+        'createdAt': user.createdAt,
+        'updatedAt': ServerValue.timestamp,
+      }).timeout(const Duration(seconds: 4));
+    } catch (e) {
+      debugPrint('[UserService] Không thể đồng bộ public_portfolios: $e');
+    }
+  }
+
+  /// Đọc thông tin Portfolio công khai của chủ văn bằng theo MSSV (ẩn số điện thoại)
+  Future<UserModel?> getPublicPortfolioByStudentCode(String studentCode) async {
+    if (_publicPortfoliosRef == null) return null;
+    final key = normalizeStudentKey(studentCode);
+    if (key.isEmpty) return null;
+
+    try {
+      final snapshot = await _publicPortfoliosRef!
+          .child(key)
+          .get()
+          .timeout(const Duration(seconds: 4));
+      if (snapshot.exists && snapshot.value is Map) {
+        final raw = Map<String, dynamic>.from(snapshot.value as Map);
+        raw['phone'] = ''; // Luôn ẩn số điện thoại trên Portfolio công khai
+        return UserModel.fromMap(
+          raw,
+          defaultUid: raw['ownerUid']?.toString() ?? '',
+        );
+      }
+    } catch (e) {
+      debugPrint('[UserService] Lỗi đọc public_portfolios: $e');
+    }
+    return null;
   }
 
   // [SINGLE SESSION] Ghi nhận phiên đăng nhập duy nhất của thiết bị hiện tại

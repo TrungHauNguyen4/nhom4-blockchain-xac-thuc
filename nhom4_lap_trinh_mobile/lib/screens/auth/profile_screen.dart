@@ -610,7 +610,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const SizedBox(height: 16),
           ],
 
-          // 2. THỐNG KÊ HOẠT ĐỘNG CÁ NHÂN
+          // 2. CÔNG TẮC BẬT / TẮT CÔNG KHAI PORTFOLIO KHI QUÉT VĂN BẰNG
+          Card(
+            child: SwitchListTile(
+              secondary: Icon(
+                user.isPortfolioPublic
+                    ? Icons.public_rounded
+                    : Icons.lock_outline_rounded,
+                color: user.isPortfolioPublic ? Colors.teal : Colors.grey,
+              ),
+              title: const Text(
+                'Công khai Portfolio khi quét văn bằng',
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5),
+              ),
+              subtitle: const Text(
+                'Cho phép người xác thực xem giới thiệu, email, liên kết và bằng cấp của bạn (SĐT luôn được ẩn).',
+                style: TextStyle(fontSize: 11.5),
+              ),
+              value: user.isPortfolioPublic,
+              onChanged: (val) async {
+                final ok = await authProvider.setPortfolioVisibility(val);
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    backgroundColor: ok ? Colors.teal : Colors.red,
+                    content: Text(
+                      ok
+                          ? (val
+                              ? 'Đã bật công khai Portfolio khi người khác quét văn bằng.'
+                              : 'Đã ẩn hồ sơ Portfolio cá nhân với người khác.')
+                          : 'Không thể cập nhật trạng thái công khai.',
+                    ),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 3. THỐNG KÊ HOẠT ĐỘNG CÁ NHÂN
           Row(
             children: [
               Expanded(
