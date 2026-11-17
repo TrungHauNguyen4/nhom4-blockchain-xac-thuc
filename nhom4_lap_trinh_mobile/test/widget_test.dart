@@ -16,6 +16,7 @@ import 'package:nhom4_lap_trinh_mobile/screens/auth/register_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/home_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/issue_certificate_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/issued_list_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/verifier/public_portfolio_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/verify_detail_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/certificate_firebase_service.dart';
@@ -932,6 +933,14 @@ void main() {
 
     expect(find.text('Hồ Sơ & Portfolio'), findsOneWidget);
     expect(find.text('Hồ sơ Portfolio chưa đầy đủ'), findsOneWidget);
+    expect(authProvider.currentUser?.isPortfolioPublic, isFalse);
+    await tester.scrollUntilVisible(
+      find.text('Công khai Portfolio khi quét văn bằng'),
+      200,
+    );
+    await tester.tap(find.text('Công khai Portfolio khi quét văn bằng'));
+    await tester.pumpAndSettle();
+    expect(authProvider.currentUser?.isPortfolioPublic, isTrue);
     await tester.scrollUntilVisible(find.text('Giới Thiệu Bản Thân'), 200);
     expect(find.text('Giới Thiệu Bản Thân'), findsOneWidget);
     await tester.scrollUntilVisible(
@@ -939,6 +948,44 @@ void main() {
       200,
     );
     expect(find.text('Thông Tin Định Danh & Liên Hệ'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Public Portfolio from VerifyDetailScreen - Mở Portfolio chủ văn bằng (cả khi không có MSSV) & ẩn SĐT',
+      (WidgetTester tester) async {
+    final validRecord = CertificateRecord(
+      dataHash:
+          '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      signer: '0xDF098FcEA905839FA80728D806069BF06b24F145',
+      timestamp: 1763340000,
+      fileName: 'Bang_Cu_Nhan.pdf',
+      studentName: 'Trần Văn A',
+      studentCode: '', // Trường hợp chỉ có tên, không có MSSV
+      degreeName: 'Cử nhân CNTT',
+      issuerName: 'Đại học Đồng Tháp',
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: VerifyDetailScreen(
+          record: validRecord,
+          searchedHash: validRecord.dataHash,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Xem Portfolio chủ văn bằng'), findsOneWidget);
+    await tester.ensureVisible(find.text('Xem Portfolio chủ văn bằng'));
+    await tester.tap(find.text('Xem Portfolio chủ văn bằng'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PublicPortfolioScreen), findsOneWidget);
+    expect(find.text('Trần Văn A'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Cử nhân CNTT'), 250);
+    expect(find.text('Cử nhân CNTT'), findsOneWidget);
+    expect(find.textContaining('Số điện thoại'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 }
