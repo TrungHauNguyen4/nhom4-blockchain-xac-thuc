@@ -159,28 +159,30 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                                   curve: Curves.easeOutCubic,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 8,
+                                      horizontal: 4,
+                                      vertical: 4,
                                     ),
                                     alignment: Alignment.center,
-                                    child: FittedBox(
-                                      fit: BoxFit.scaleDown,
-                                      child: TweenAnimationBuilder<Color?>(
-                                        duration:
-                                            const Duration(milliseconds: 240),
-                                        curve: Curves.easeOutCubic,
-                                        tween: ColorTween(
-                                          end: isSelected
-                                              ? activeTextColor
-                                              : inactiveTextColor,
-                                        ),
-                                        builder: (context, color, _) {
-                                          final resolvedColor = color ??
-                                              (isSelected
-                                                  ? activeTextColor
-                                                  : inactiveTextColor);
-                                          return Row(
+                                    child: TweenAnimationBuilder<Color?>(
+                                      duration:
+                                          const Duration(milliseconds: 240),
+                                      curve: Curves.easeOutCubic,
+                                      tween: ColorTween(
+                                        end: isSelected
+                                            ? activeTextColor
+                                            : inactiveTextColor,
+                                      ),
+                                      builder: (context, color, _) {
+                                        final resolvedColor = color ??
+                                            (isSelected
+                                                ? activeTextColor
+                                                : inactiveTextColor);
+                                        return FittedBox(
+                                          fit: BoxFit.scaleDown,
+                                          child: Column(
                                             mainAxisSize: MainAxisSize.min,
+                                            mainAxisAlignment:
+                                                MainAxisAlignment.center,
                                             children: [
                                               Icon(
                                                 isSelected
@@ -189,11 +191,12 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                                                 size: 18,
                                                 color: resolvedColor,
                                               ),
-                                              const SizedBox(width: 5),
+                                              const SizedBox(height: 2),
                                               Text(
                                                 item.label,
+                                                maxLines: 1,
                                                 style: TextStyle(
-                                                  fontSize: 12,
+                                                  fontSize: 10.5,
                                                   fontWeight: isSelected
                                                       ? FontWeight.w700
                                                       : FontWeight.w500,
@@ -201,9 +204,9 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                                                 ),
                                               ),
                                             ],
-                                          );
-                                        },
-                                      ),
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                                 ),

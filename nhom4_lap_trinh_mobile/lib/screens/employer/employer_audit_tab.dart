@@ -312,20 +312,26 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
 
     return Column(
       children: [
-        Row(
-          children: [
-            Expanded(child: _buildKpiTile(items[0])),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKpiTile(items[1])),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildKpiTile(items[0])),
+              const SizedBox(width: 10),
+              Expanded(child: _buildKpiTile(items[1])),
+            ],
+          ),
         ),
         const SizedBox(height: 10),
-        Row(
-          children: [
-            Expanded(child: _buildKpiTile(items[2])),
-            const SizedBox(width: 10),
-            Expanded(child: _buildKpiTile(items[3])),
-          ],
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildKpiTile(items[2])),
+              const SizedBox(width: 10),
+              Expanded(child: _buildKpiTile(items[3])),
+            ],
+          ),
         ),
       ],
     );
@@ -371,9 +377,13 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
                 ),
                 Text(
                   data.label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                  maxLines: 2,
+                  softWrap: true,
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    height: 1.25,
+                    color: Colors.grey,
+                  ),
                 ),
               ],
             ),
@@ -391,19 +401,16 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(Icons.person_search_rounded, color: Colors.blueAccent),
                 SizedBox(width: 8),
                 Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'Tra Cứu Hồ Sơ Văn Bằng Ứng Viên (Theo MSSV / Họ Tên)',
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 14,
-                      ),
+                  child: Text(
+                    'Tra Cứu Hồ Sơ Văn Bằng Ứng Viên (Theo MSSV / Họ Tên)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
                     ),
                   ),
                 ),
@@ -411,43 +418,41 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Nhập Mã số sinh viên (VD: SV2026...) hoặc Họ tên ứng viên để đối chiếu toàn bộ bằng cấp đã được nhà trường ký số.',
+              'Nhập Mã số sinh viên hoặc Họ tên ứng viên để đối chiếu toàn bộ bằng cấp đã được nhà trường ký số.',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
             const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _candidateSearchController,
-                    onSubmitted: (_) => _searchCandidatePortfolio(),
-                    decoration: InputDecoration(
-                      hintText: 'Nhập MSSV, tên ứng viên hoặc tên bằng...',
-                      prefixIcon: const Icon(Icons.search, size: 19),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 10,
-                      ),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      suffixIcon: _candidateSearchController.text.isNotEmpty
-                          ? IconButton(
-                              icon: const Icon(Icons.clear, size: 17),
-                              onPressed: () {
-                                _candidateSearchController.clear();
-                                setState(() {});
-                              },
-                            )
-                          : null,
-                    ),
-                    onChanged: (_) => setState(() {}),
-                  ),
+            TextField(
+              controller: _candidateSearchController,
+              onSubmitted: (_) => _searchCandidatePortfolio(),
+              decoration: InputDecoration(
+                hintText: 'Nhập MSSV, họ tên hoặc tên bằng cấp',
+                prefixIcon: const Icon(Icons.search, size: 19),
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
                 ),
-                const SizedBox(width: 8),
-                ElevatedButton.icon(
-                  onPressed:
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                suffixIcon: _candidateSearchController.text.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 17),
+                        onPressed: () {
+                          _candidateSearchController.clear();
+                          setState(() {});
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (_) => setState(() {}),
+            ),
+            const SizedBox(height: 10),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton.icon(
+                onPressed:
                       _isSearchingCandidates ? null : _searchCandidatePortfolio,
                   icon: _isSearchingCandidates
                       ? const SizedBox(
@@ -467,7 +472,6 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
                     ),
                   ),
                 ),
-              ],
             ),
             if (_searchError != null) ...[
               const SizedBox(height: 8),
@@ -522,7 +526,7 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
           cert.degreeName?.trim().isNotEmpty == true
               ? cert.degreeName!
               : cert.fileName,
-          maxLines: 1,
+          maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
         ),
@@ -564,31 +568,39 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
               children: [
                 const Expanded(
                   child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Icon(Icons.fact_check_outlined, color: Colors.teal),
                       SizedBox(width: 8),
                       Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Text(
-                            'Danh Sách Ứng Viên Đã Đánh Giá Tuyển Dụng',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
+                        child: Text(
+                          'Danh Sách Ứng Viên Đã Đánh Giá Tuyển Dụng',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                Text(
-                  '${_hrReviews.length} hồ sơ',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.grey,
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    '${_hrReviews.length} hồ sơ',
+                    style: const TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey,
+                    ),
                   ),
                 ),
               ],
@@ -691,7 +703,7 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
                     studentCode.isNotEmpty
                         ? '$studentName ($studentCode)'
                         : studentName,
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
@@ -711,7 +723,7 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
             const SizedBox(height: 4),
             Text(
               degreeName,
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
             ),

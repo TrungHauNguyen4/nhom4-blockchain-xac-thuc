@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/glass_widgets.dart';
 import '../auth/profile_screen.dart';
@@ -33,9 +34,185 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentTabIndex = 0;
+  bool _checkedOnboarding = false;
   final GlobalKey<VaultTabState> _vaultKey = GlobalKey<VaultTabState>();
   final GlobalKey<EmployerAuditTabState> _employerAuditKey =
       GlobalKey<EmployerAuditTabState>();
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_checkedOnboarding) {
+      final authProvider = Provider.of<AuthProvider?>(context, listen: false);
+      final user = authProvider?.currentUser;
+      if (authProvider != null && user != null && !user.isProfileCompleted) {
+        _checkedOnboarding = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _showFirstTimeGoogleOnboardingDialog(user, authProvider);
+          }
+        });
+      }
+    }
+  }
+
+  void _showFirstTimeGoogleOnboardingDialog(
+    UserModel user,
+    AuthProvider authProvider,
+  ) {
+    final nameCtrl = TextEditingController(text: user.name);
+    final orgCtrl = TextEditingController(text: user.organization);
+    final studentCodeCtrl = TextEditingController(text: user.studentCode);
+    final headlineCtrl = TextEditingController(text: user.headline);
+    final bioCtrl = TextEditingController(text: user.bio);
+    String selectedRole =
+        user.isEmployer ? UserRole.employer : UserRole.student;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            title: const Row(
+              children: [
+                Icon(Icons.waving_hand_rounded, color: Colors.amber),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Hoàn tất hồ sơ lần đầu',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Tài khoản Google của bạn chưa có đầy đủ thông tin. Hãy bổ sung để hiển thị Portfolio cá nhân chuẩn xác hơn:',
+                    style: TextStyle(fontSize: 12.5, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Vai trò của bạn:',
+                    style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Sinh viên'),
+                        selected: selectedRole == UserRole.student,
+                        onSelected: (_) => setDialogState(
+                          () => selectedRole = UserRole.student,
+                        ),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Nhà tuyển dụng'),
+                        selected: selectedRole == UserRole.employer,
+                        onSelected: (_) => setDialogState(
+                          () => selectedRole = UserRole.employer,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Họ và tên',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: orgCtrl,
+                    decoration: InputDecoration(
+                      labelText: selectedRole == UserRole.employer
+                          ? 'Doanh nghiệp / Công ty'
+                          : 'Trường học / Đơn vị',
+                      border: const OutlineInputBorder(),
+                    ),
+                  ),
+                  if (selectedRole == UserRole.student) ...[
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: studentCodeCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Mã số sinh viên',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: headlineCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Chuyên ngành / Chức danh',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: bioCtrl,
+                    maxLines: 2,
+                    decoration: const InputDecoration(
+                      labelText: 'Giới thiệu ngắn',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(dialogContext);
+                  authProvider.dismissFirstTimeOnboarding();
+                },
+                child: const Text('Để sau'),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  final ok = await authProvider.updateProfile(
+                    name: nameCtrl.text.trim().isEmpty
+                        ? user.name
+                        : nameCtrl.text.trim(),
+                    organization: orgCtrl.text.trim(),
+                    studentCode: selectedRole == UserRole.student
+                        ? studentCodeCtrl.text.trim()
+                        : '',
+                    headline: headlineCtrl.text.trim(),
+                    bio: bioCtrl.text.trim(),
+                    role: selectedRole,
+                    markCompleted: true,
+                  );
+                  if (!dialogContext.mounted) return;
+                  Navigator.pop(dialogContext);
+                  if (!mounted) return;
+                  ScaffoldMessenger.of(this.context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        ok
+                            ? 'Đã cập nhật hồ sơ cá nhân!'
+                            : 'Không thể lưu thông tin lúc này.',
+                      ),
+                      backgroundColor: ok ? Colors.green : Colors.red,
+                    ),
+                  );
+                },
+                child: const Text('Lưu thông tin'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
