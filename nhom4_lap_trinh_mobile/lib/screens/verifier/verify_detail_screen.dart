@@ -6,6 +6,7 @@ import '../../models/certificate_record.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/db_service.dart';
 import '../../services/hr_review_service.dart';
+import 'public_portfolio_screen.dart';
 
 class VerifyDetailScreen extends StatefulWidget {
   final CertificateRecord? record;
@@ -793,6 +794,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
           _buildStatusHeader(isValid),
           const SizedBox(height: 16),
           _buildDetailsCard(context, isValid),
+          if (isValid && widget.record != null) ...[
+            const SizedBox(height: 12),
+            _buildViewPortfolioButton(context),
+          ],
           if (isEmployer) ...[
             const SizedBox(height: 16),
             _buildEmployerActionCard(context, isValid),
@@ -804,6 +809,36 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
             _buildSaveOfflineButton(),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildViewPortfolioButton(BuildContext context) {
+    final record = widget.record;
+    if (record == null) return const SizedBox.shrink();
+
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        icon: const Icon(Icons.account_box_outlined),
+        label: const Text(
+          'Xem Portfolio chủ văn bằng',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PublicPortfolioScreen(record: record),
+            ),
+          );
+        },
       ),
     );
   }
@@ -828,6 +863,10 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
                   if (isValid) ...[
                     const SizedBox(height: 16),
                     _buildQrCertificateCard(context),
+                    if (widget.record != null) ...[
+                      const SizedBox(height: 12),
+                      _buildViewPortfolioButton(context),
+                    ],
                     const SizedBox(height: 16),
                     _buildSaveOfflineButton(),
                   ],
