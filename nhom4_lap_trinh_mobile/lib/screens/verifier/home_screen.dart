@@ -185,7 +185,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     organization: orgCtrl.text.trim(),
                     studentCode: selectedRole == UserRole.student
                         ? studentCodeCtrl.text.trim()
-                        : '',
+                        : null,
                     headline: headlineCtrl.text.trim(),
                     bio: bioCtrl.text.trim(),
                     role: selectedRole,
