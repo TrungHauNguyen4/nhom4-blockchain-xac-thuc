@@ -6,6 +6,7 @@ import '../../models/scan_history_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/db_service.dart';
 import '../../widgets/certificate_card.dart';
+import '../../widgets/pagination_controls.dart';
 import '../verifier/verify_detail_screen.dart';
 
 class VaultTab extends StatefulWidget {
@@ -23,6 +24,8 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
   List<ScanHistoryModel> _scanHistory = [];
   bool _isLoading = false;
   String _historyFilter = 'ALL'; // 'ALL', 'VALID', 'INVALID', 'QR', 'FILE'
+  int _certPage = 1;
+  int _historyPage = 1;
 
   @override
   void initState() {
@@ -41,7 +44,11 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
   // [READ] Tải hoặc tìm kiếm dữ liệu Offline từ Sqflite (Chuẩn Chương 11 flutter_demo)
   Future<void> reloadData() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _certPage = 1;
+      _historyPage = 1;
+    });
 
     final keyword = _searchController.text.trim();
     final certs = await DatabaseService.instance.searchCertificates(keyword);
@@ -157,9 +164,10 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                   Expanded(
                     child: TextField(
                       controller: _searchController,
-                      onChanged: (_) => reloadData(),
+                      onChanged: (_) => setState(() {}),
+                      onSubmitted: (_) => reloadData(),
                       decoration: InputDecoration(
-                        hintText: 'Tìm theo Tên SV, MSSV, Văn bằng, Đơn vị...',
+                        hintText: 'Tìm theo Tên SV, MSSV, Văn bằng...',
                         prefixIcon: const Icon(Icons.search, size: 20),
                         filled: true,
                         fillColor: isDark
@@ -198,7 +206,22 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                       ),
                     ),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(width: 6),
+                  ElevatedButton.icon(
+                    onPressed: reloadData,
+                    icon: const Icon(Icons.search, size: 17),
+                    label: const Text('Tìm'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 10,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 2),
                   PopupMenuButton<String>(
                     tooltip: 'Tùy chọn sổ tay',
                     icon: const Icon(Icons.more_vert),
@@ -400,47 +423,65 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
 
     // Sử dụng OrientationBuilder theo chuẩn Chương 9 flutter_demo:
     // Màn hình dọc (Portrait) -> 1 cột; Màn hình ngang (Landscape) -> 2 cột
-    return OrientationBuilder(
-      builder: (context, orientation) {
-        final int columnCount =
-            MediaQuery.orientationOf(context) == Orientation.portrait ? 1 : 2;
+    final pagedCerts = PaginationControls.slicePage(
+      _certificates,
+      currentPage: _certPage,
+    );
 
-        if (columnCount == 1) {
-          return ListView.separated(
-            padding: const EdgeInsets.all(12),
-            itemCount: _certificates.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) {
-              final item = _certificates[index];
-              return CertificateCard(
-                record: item,
-                onDelete: () => _confirmDeleteCertificate(item),
-                onTap: () => _openSavedCertificateDetail(item),
+    return Column(
+      children: [
+        Expanded(
+          child: OrientationBuilder(
+            builder: (context, orientation) {
+              final int columnCount =
+                  MediaQuery.orientationOf(context) == Orientation.portrait
+                      ? 1
+                      : 2;
+
+              if (columnCount == 1) {
+                return ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: pagedCerts.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = pagedCerts[index];
+                    return CertificateCard(
+                      record: item,
+                      onDelete: () => _confirmDeleteCertificate(item),
+                      onTap: () => _openSavedCertificateDetail(item),
+                    );
+                  },
+                );
+              }
+
+              // Chế độ xoay ngang (Landscape): GridView 2 cột với mainAxisExtent chống tràn pixel
+              return GridView.builder(
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  mainAxisExtent: 205,
+                ),
+                itemCount: pagedCerts.length,
+                itemBuilder: (context, index) {
+                  final item = pagedCerts[index];
+                  return CertificateCard(
+                    record: item,
+                    onDelete: () => _confirmDeleteCertificate(item),
+                    onTap: () => _openSavedCertificateDetail(item),
+                  );
+                },
               );
             },
-          );
-        }
-
-        // Chế độ xoay ngang (Landscape): GridView 2 cột với mainAxisExtent chống tràn pixel
-        return GridView.builder(
-          padding: const EdgeInsets.all(12),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 2,
-            crossAxisSpacing: 12,
-            mainAxisSpacing: 12,
-            mainAxisExtent: 205,
           ),
-          itemCount: _certificates.length,
-          itemBuilder: (context, index) {
-            final item = _certificates[index];
-            return CertificateCard(
-              record: item,
-              onDelete: () => _confirmDeleteCertificate(item),
-              onTap: () => _openSavedCertificateDetail(item),
-            );
-          },
-        );
-      },
+        ),
+        PaginationControls(
+          currentPage: _certPage,
+          totalItems: _certificates.length,
+          onPageChanged: (p) => setState(() => _certPage = p),
+        ),
+      ],
     );
   }
 
@@ -462,6 +503,10 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
   // ========================================================
   Widget _buildScanHistoryView() {
     final list = _filteredHistory;
+    final pagedHistory = PaginationControls.slicePage(
+      list,
+      currentPage: _historyPage,
+    );
 
     return Column(
       children: [
@@ -498,35 +543,51 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                     ],
                   ),
                 )
-              : OrientationBuilder(
-                  builder: (context, orientation) {
-                    final int columnCount =
-                        MediaQuery.orientationOf(context) == Orientation.portrait
-                            ? 1
-                            : 2;
+              : Column(
+                  children: [
+                    Expanded(
+                      child: OrientationBuilder(
+                        builder: (context, orientation) {
+                          final int columnCount =
+                              MediaQuery.orientationOf(context) ==
+                                      Orientation.portrait
+                                  ? 1
+                                  : 2;
 
-                    if (columnCount == 1) {
-                      return ListView.separated(
-                        padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                        itemCount: list.length,
-                        separatorBuilder: (_, _) => const SizedBox(height: 10),
-                        itemBuilder: (context, index) => _buildHistoryCard(list[index]),
-                      );
-                    }
+                          if (columnCount == 1) {
+                            return ListView.separated(
+                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                              itemCount: pagedHistory.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(height: 10),
+                              itemBuilder: (context, index) =>
+                                  _buildHistoryCard(pagedHistory[index]),
+                            );
+                          }
 
-                    // Khi xoay ngang: hiển thị 2 cột bằng GridView.builder
-                    return GridView.builder(
-                      padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-                      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 12,
-                        mainAxisSpacing: 10,
-                        mainAxisExtent: 150,
+                          // Khi xoay ngang: hiển thị 2 cột bằng GridView.builder
+                          return GridView.builder(
+                            padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                              crossAxisCount: 2,
+                              crossAxisSpacing: 12,
+                              mainAxisSpacing: 10,
+                              mainAxisExtent: 150,
+                            ),
+                            itemCount: pagedHistory.length,
+                            itemBuilder: (context, index) =>
+                                _buildHistoryCard(pagedHistory[index]),
+                          );
+                        },
                       ),
-                      itemCount: list.length,
-                      itemBuilder: (context, index) => _buildHistoryCard(list[index]),
-                    );
-                  },
+                    ),
+                    PaginationControls(
+                      currentPage: _historyPage,
+                      totalItems: list.length,
+                      onPageChanged: (p) => setState(() => _historyPage = p),
+                    ),
+                  ],
                 ),
         ),
       ],
@@ -539,7 +600,10 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
       label: Text(label, style: const TextStyle(fontSize: 12)),
       selected: selected,
       onSelected: (_) {
-        setState(() => _historyFilter = code);
+        setState(() {
+          _historyFilter = code;
+          _historyPage = 1;
+        });
       },
     );
   }

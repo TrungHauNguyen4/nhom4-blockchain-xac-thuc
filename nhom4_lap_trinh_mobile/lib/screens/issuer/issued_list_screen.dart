@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../models/certificate_record.dart';
 import '../../services/api_service.dart';
 import '../../services/certificate_firebase_service.dart';
+import '../../widgets/pagination_controls.dart';
 
 /// Màn hình Danh sách Văn bằng đã cấp phát (Đọc từ SQL Server Backend)
 /// Sử dụng FutureBuilder theo chuẩn Chương 12 (flutter_demo)
@@ -19,6 +20,7 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
   final TextEditingController _searchController = TextEditingController();
   late Future<List<CertificateRecord>> _certificatesFuture;
   bool _isSyncingToFirebase = false;
+  int _currentPage = 1;
 
   @override
   void initState() {
@@ -35,6 +37,7 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
   void _loadCertificates([String keyword = '']) {
     final apiService = context.read<ApiService>();
     setState(() {
+      _currentPage = 1;
       _certificatesFuture = apiService.fetchIssuedCertificates(keyword: keyword);
     });
   }
@@ -216,27 +219,51 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
       ),
       body: Column(
         children: [
-          // Thanh tìm kiếm
+          // Thanh tìm kiếm kèm nút Tìm
           Padding(
             padding: const EdgeInsets.all(12.0),
-            child: TextField(
-              controller: _searchController,
-              decoration: InputDecoration(
-                hintText: 'Tìm theo Tên SV, MSSV, Tên bằng...',
-                prefixIcon: const Icon(Icons.search),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    _loadCertificates();
-                  },
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (_) => setState(() {}),
+                    decoration: InputDecoration(
+                      hintText: 'Tìm theo Tên SV, MSSV, Tên bằng...',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _searchController.text.isNotEmpty
+                          ? IconButton(
+                              icon: const Icon(Icons.clear),
+                              onPressed: () {
+                                _searchController.clear();
+                                _loadCertificates();
+                              },
+                            )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    onSubmitted: (val) => _loadCertificates(val),
+                  ),
                 ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () => _loadCertificates(_searchController.text),
+                  icon: const Icon(Icons.search, size: 18),
+                  label: const Text('Tìm'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 12,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
                 ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
-              onSubmitted: (val) => _loadCertificates(val),
+              ],
             ),
           ),
 
@@ -304,36 +331,60 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
                     );
                   }
 
-                  // Trạng thái 4: Hiển thị danh sách 1 cột (dọc) hoặc 2 cột (ngang) bằng OrientationBuilder
-                  return OrientationBuilder(
-                    builder: (context, orientation) {
-                      final isLandscape =
-                          MediaQuery.orientationOf(context) ==
-                              Orientation.landscape;
+                  // Trạng thái 4: Hiển thị danh sách 1 cột (dọc) hoặc 2 cột (ngang) có phân trang 7 dòng/trang
+                  final pagedList = PaginationControls.slicePage(
+                    list,
+                    currentPage: _currentPage,
+                  );
 
-                      if (isLandscape) {
-                        return GridView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            mainAxisExtent: 98,
-                          ),
-                          itemCount: list.length,
-                          itemBuilder: (context, index) => _buildIssuedItemCard(list[index]),
-                        );
-                      }
+                  return Column(
+                    children: [
+                      Expanded(
+                        child: OrientationBuilder(
+                          builder: (context, orientation) {
+                            final isLandscape =
+                                MediaQuery.orientationOf(context) ==
+                                    Orientation.landscape;
 
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        itemCount: list.length,
-                        itemBuilder: (context, index) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: _buildIssuedItemCard(list[index]),
+                            if (isLandscape) {
+                              return GridView.builder(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 6,
+                                ),
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                  mainAxisExtent: 98,
+                                ),
+                                itemCount: pagedList.length,
+                                itemBuilder: (context, index) =>
+                                    _buildIssuedItemCard(pagedList[index]),
+                              );
+                            }
+
+                            return ListView.builder(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 6,
+                              ),
+                              itemCount: pagedList.length,
+                              itemBuilder: (context, index) => Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: _buildIssuedItemCard(pagedList[index]),
+                              ),
+                            );
+                          },
                         ),
-                      );
-                    },
+                      ),
+                      PaginationControls(
+                        currentPage: _currentPage,
+                        totalItems: list.length,
+                        onPageChanged: (p) => setState(() => _currentPage = p),
+                      ),
+                    ],
                   );
                 },
               ),
