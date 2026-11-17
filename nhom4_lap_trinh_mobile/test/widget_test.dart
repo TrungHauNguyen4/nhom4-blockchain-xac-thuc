@@ -22,6 +22,7 @@ import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/certificate_firebase_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/hash_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/local_file_save_service.dart';
+import 'package:nhom4_lap_trinh_mobile/widgets/pagination_controls.dart';
 import 'package:nhom4_lap_trinh_mobile/widgets/twinkling_dot_matrix_background.dart';
 
 class _FakeLedgerApiService extends ApiService {
@@ -987,5 +988,63 @@ void main() {
     expect(find.text('Cử nhân CNTT'), findsOneWidget);
     expect(find.textContaining('Số điện thoại'), findsNothing);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'Pagination (7 dòng/trang) & Giữ MSSV khi đổi vai trò - Phân trang chuẩn 7 dòng và không mất MSSV',
+      (WidgetTester tester) async {
+    // 1. Kiểm tra phân trang 7 dòng/trang với 15 phần tử -> 3 trang (7, 7, 1)
+    final items = List<int>.generate(15, (i) => i + 1);
+    expect(PaginationControls.computeTotalPages(items.length), 3);
+    expect(PaginationControls.slicePage(items, currentPage: 1).length, 7);
+    expect(PaginationControls.slicePage(items, currentPage: 2).length, 7);
+    expect(PaginationControls.slicePage(items, currentPage: 3), [15]);
+
+    int currentPage = 1;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: StatefulBuilder(
+            builder: (context, setState) => PaginationControls(
+              currentPage: currentPage,
+              totalItems: items.length,
+              onPageChanged: (p) => setState(() => currentPage = p),
+            ),
+          ),
+        ),
+      ),
+    );
+    expect(find.text('Trang 1 / 3'), findsOneWidget);
+    await tester.tap(find.text('Sau'));
+    await tester.pumpAndSettle();
+    expect(find.text('Trang 2 / 3'), findsOneWidget);
+
+    // 2. Kiểm tra giữ nguyên MSSV khi chuyển từ Sinh viên -> Nhà tuyển dụng -> Sinh viên
+    SharedPreferences.setMockInitialValues({});
+    final student = UserModel(
+      uid: 'sv_keep_code',
+      name: 'Sinh Viên Test',
+      email: 'sv@dthu.edu.vn',
+      role: UserRole.student,
+      studentCode: '0023411914',
+      organization: 'Đại học Đồng Tháp',
+      createdAt: '2026-01-01',
+    );
+    final authProvider = _createAuthenticatedTestProvider(student);
+    await authProvider.updateProfile(
+      name: student.name,
+      organization: student.organization,
+      role: UserRole.employer,
+    );
+    expect(authProvider.currentUser?.role, UserRole.employer);
+    expect(authProvider.currentUser?.studentCode, '0023411914');
+
+    await authProvider.updateProfile(
+      name: student.name,
+      organization: student.organization,
+      role: UserRole.student,
+    );
+    expect(authProvider.currentUser?.role, UserRole.student);
+    expect(authProvider.currentUser?.studentCode, '0023411914');
   });
 }

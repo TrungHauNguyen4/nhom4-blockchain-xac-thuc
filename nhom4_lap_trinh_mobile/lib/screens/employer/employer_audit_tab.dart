@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../services/hr_review_service.dart';
+import '../../widgets/pagination_controls.dart';
 import '../verifier/verify_detail_screen.dart';
 import 'hr_audit_report_screen.dart';
 
@@ -31,9 +32,9 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
   bool _isSearchingCandidates = false;
   String? _searchError;
 
-  int _totalScans = 0;
-  int _validScans = 0;
   int _invalidScans = 0;
+  int _candidatePage = 1;
+  int _reviewPage = 1;
 
   List<CertificateRecord> _candidateCertificates = [];
   Map<String, Map<String, dynamic>> _hrReviews = {};
@@ -69,10 +70,9 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
 
       if (!mounted) return;
       setState(() {
-        _totalScans = total;
-        _validScans = valid;
         _invalidScans = invalid;
         _hrReviews = loadedReviews;
+        _reviewPage = 1;
         _isLoadingStats = false;
       });
     } catch (_) {
@@ -97,6 +97,7 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
       if (!mounted) return;
       setState(() {
         _candidateCertificates = results;
+        _candidatePage = 1;
         _isSearchingCandidates = false;
       });
     } catch (e) {
@@ -285,18 +286,6 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
   Widget _buildKpiGrid(BuildContext context, {required bool isPortrait}) {
     final items = [
       _KpiItemData(
-        label: 'Tổng lượt thẩm định',
-        value: '$_totalScans',
-        icon: Icons.qr_code_scanner,
-        color: Colors.blue,
-      ),
-      _KpiItemData(
-        label: 'Văn bằng Hợp lệ',
-        value: '$_validScans',
-        icon: Icons.verified_rounded,
-        color: Colors.green,
-      ),
-      _KpiItemData(
         label: 'Cảnh báo bằng giả',
         value: '$_invalidScans',
         icon: Icons.gpp_bad_rounded,
@@ -310,30 +299,15 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
       ),
     ];
 
-    return Column(
-      children: [
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _buildKpiTile(items[0])),
-              const SizedBox(width: 10),
-              Expanded(child: _buildKpiTile(items[1])),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _buildKpiTile(items[2])),
-              const SizedBox(width: 10),
-              Expanded(child: _buildKpiTile(items[3])),
-            ],
-          ),
-        ),
-      ],
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Expanded(child: _buildKpiTile(items[0])),
+          const SizedBox(width: 10),
+          Expanded(child: _buildKpiTile(items[1])),
+        ],
+      ),
     );
   }
 
@@ -497,8 +471,17 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               )
-            else
-              ..._candidateCertificates.map(_buildCandidateCertificateTile),
+            else ...[
+              ...PaginationControls.slicePage(
+                _candidateCertificates,
+                currentPage: _candidatePage,
+              ).map(_buildCandidateCertificateTile),
+              PaginationControls(
+                currentPage: _candidatePage,
+                totalItems: _candidateCertificates.length,
+                onPageChanged: (p) => setState(() => _candidatePage = p),
+              ),
+            ],
           ],
         ),
       ),
@@ -637,8 +620,17 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
                   style: TextStyle(fontSize: 12, color: Colors.grey),
                 ),
               )
-            else
-              ...entries.map((entry) => _buildReviewedItemTile(entry.key, entry.value)),
+            else ...[
+              ...PaginationControls.slicePage(
+                entries,
+                currentPage: _reviewPage,
+              ).map((entry) => _buildReviewedItemTile(entry.key, entry.value)),
+              PaginationControls(
+                currentPage: _reviewPage,
+                totalItems: entries.length,
+                onPageChanged: (p) => setState(() => _reviewPage = p),
+              ),
+            ],
           ],
         ),
       ),
@@ -650,7 +642,10 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
     return ChoiceChip(
       label: Text(label, style: const TextStyle(fontSize: 11.5)),
       selected: selected,
-      onSelected: (_) => setState(() => _reviewFilter = code),
+      onSelected: (_) => setState(() {
+        _reviewFilter = code;
+        _reviewPage = 1;
+      }),
     );
   }
 

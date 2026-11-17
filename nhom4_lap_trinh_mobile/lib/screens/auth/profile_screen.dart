@@ -4,7 +4,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
-import '../../services/db_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -15,28 +14,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
-  int _savedCertCount = 0;
-  int _scanHistoryCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadPortfolioStats();
-  }
-
-  Future<void> _loadPortfolioStats() async {
-    try {
-      final saved = await DatabaseService.instance.getAllCertificates();
-      final history = await DatabaseService.instance.getAllScanHistory();
-      if (!mounted) return;
-      setState(() {
-        _savedCertCount = saved.length;
-        _scanHistoryCount = history.length;
-      });
-    } catch (_) {
-      // An toàn khi chạy trong môi trường widget test không có native Sqflite
-    }
-  }
 
   Future<void> _pickAvatar(ImageSource source) async {
     try {
@@ -232,7 +209,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   studentCode:
                       (selectedRole == UserRole.student || user.isStaff)
                           ? studentCodeCtrl.text.trim()
-                          : '',
+                          : null,
                   headline: headlineCtrl.text.trim(),
                   bio: bioCtrl.text.trim(),
                   phone: phoneCtrl.text.trim(),
@@ -649,30 +626,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           const SizedBox(height: 16),
 
-          // 3. THỐNG KÊ HOẠT ĐỘNG CÁ NHÂN
-          Row(
-            children: [
-              Expanded(
-                child: _buildPortfolioMetricCard(
-                  icon: Icons.folder_special_outlined,
-                  color: Colors.teal,
-                  value: '$_savedCertCount',
-                  label: 'Văn bằng đã lưu',
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _buildPortfolioMetricCard(
-                  icon: Icons.qr_code_scanner_rounded,
-                  color: Colors.blue,
-                  value: '$_scanHistoryCount',
-                  label: 'Lượt tra cứu',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-
           // 3. GIỚI THIỆU BẢN THÂN (BIO)
           Card(
             child: Padding(
@@ -919,55 +872,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildPortfolioMetricCard({
-    required IconData icon,
-    required Color color,
-    required String value,
-    required String label,
-  }) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              children: [
-                CircleAvatar(
-                  radius: 15,
-                  backgroundColor: color.withValues(alpha: 0.14),
-                  child: Icon(icon, color: color, size: 17),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      value,
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: color,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 6),
-            Text(
-              label,
-              softWrap: true,
-              style: const TextStyle(fontSize: 11.5, color: Colors.grey),
-            ),
-          ],
-        ),
       ),
     );
   }
