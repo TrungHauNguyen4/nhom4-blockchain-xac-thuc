@@ -368,13 +368,13 @@ class _IssuedListScreenState extends State<IssuedListScreen> {
             if (item.degreeName != null)
               Text(
                 item.degreeName!,
-                maxLines: 1,
+                maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(fontSize: 13, color: Colors.blueAccent),
               ),
             Text(
               'MSSV: ${item.studentCode ?? 'N/A'} • Ngày: ${item.formattedBlockchainDate}',
-              maxLines: 1,
+              maxLines: 2,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(fontSize: 11),
             ),

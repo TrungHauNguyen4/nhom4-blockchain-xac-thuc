@@ -943,8 +943,7 @@ class _VerifyDetailScreenState extends State<VerifyDetailScreen> {
               maxLines: 2,
               decoration: InputDecoration(
                 labelText: 'Ghi chú phỏng vấn / Nhận xét của HR',
-                hintText:
-                    'VD: Bằng chính chủ, ứng viên đạt vòng thẩm định hồ sơ...',
+                hintText: 'Nhập nhận xét của nhà tuyển dụng',
                 isDense: true,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),

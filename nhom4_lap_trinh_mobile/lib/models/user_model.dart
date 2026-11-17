@@ -62,6 +62,11 @@ class UserModel {
   final String? originalRole; // Vai trò gốc trước khi nâng cấp lên 'staff'
   final String organization; // Trường học / Doanh nghiệp
   final String studentCode; // MSSV (dành cho sinh viên)
+  final String headline; // Chuyên ngành / Chức danh
+  final String bio; // Giới thiệu bản thân (Portfolio)
+  final String phone; // Số điện thoại liên hệ
+  final String portfolioUrl; // Liên kết GitHub / LinkedIn / Website
+  final bool isProfileCompleted; // Đã hoàn tất bổ sung thông tin lần đầu
   final String createdAt;
 
   const UserModel({
@@ -73,12 +78,22 @@ class UserModel {
     this.originalRole,
     this.organization = '',
     this.studentCode = '',
+    this.headline = '',
+    this.bio = '',
+    this.phone = '',
+    this.portfolioUrl = '',
+    this.isProfileCompleted = true,
     required this.createdAt,
   });
 
   bool get isStaff => role == UserRole.staff;
   bool get isEmployer => role == UserRole.employer;
   bool get isStudent => role == UserRole.student;
+
+  bool get hasMissingPortfolioInfo =>
+      organization.trim().isEmpty ||
+      (isStudent && studentCode.trim().isEmpty) ||
+      bio.trim().isEmpty;
 
   String get roleTitle => UserRole.getRoleLabel(role);
 
@@ -94,12 +109,18 @@ class UserModel {
         'originalRole': originalRole,
       'organization': organization,
       'studentCode': studentCode,
+      'headline': headline,
+      'bio': bio,
+      'phone': phone,
+      'portfolioUrl': portfolioUrl,
+      'isProfileCompleted': isProfileCompleted,
       'createdAt': createdAt,
     };
   }
 
   // [READ] Khởi tạo từ Map của Firebase Realtime Database
   factory UserModel.fromMap(Map<dynamic, dynamic> map, {String? defaultUid}) {
+    final org = (map['organization'] ?? '').toString();
     return UserModel(
       uid: (map['uid'] ?? defaultUid ?? '').toString(),
       name: (map['name'] ?? 'Người dùng').toString(),
@@ -107,8 +128,15 @@ class UserModel {
       avatarBase64OrUrl: map['avatarBase64OrUrl']?.toString(),
       role: (map['role'] ?? UserRole.student).toString(),
       originalRole: map['originalRole']?.toString(),
-      organization: (map['organization'] ?? '').toString(),
+      organization: org,
       studentCode: (map['studentCode'] ?? '').toString(),
+      headline: (map['headline'] ?? '').toString(),
+      bio: (map['bio'] ?? '').toString(),
+      phone: (map['phone'] ?? '').toString(),
+      portfolioUrl: (map['portfolioUrl'] ?? '').toString(),
+      isProfileCompleted: map['isProfileCompleted'] is bool
+          ? map['isProfileCompleted'] as bool
+          : org.trim().isNotEmpty,
       createdAt: (map['createdAt'] ?? '').toString(),
     );
   }
@@ -128,6 +156,11 @@ class UserModel {
     String? originalRole,
     String? organization,
     String? studentCode,
+    String? headline,
+    String? bio,
+    String? phone,
+    String? portfolioUrl,
+    bool? isProfileCompleted,
     String? createdAt,
   }) {
     return UserModel(
@@ -139,6 +172,11 @@ class UserModel {
       originalRole: originalRole ?? this.originalRole,
       organization: organization ?? this.organization,
       studentCode: studentCode ?? this.studentCode,
+      headline: headline ?? this.headline,
+      bio: bio ?? this.bio,
+      phone: phone ?? this.phone,
+      portfolioUrl: portfolioUrl ?? this.portfolioUrl,
+      isProfileCompleted: isProfileCompleted ?? this.isProfileCompleted,
       createdAt: createdAt ?? this.createdAt,
     );
   }

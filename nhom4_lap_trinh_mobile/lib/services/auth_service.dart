@@ -163,12 +163,14 @@ class AuthService {
         var profile = await _userService.getUserProfile(uid);
         if (profile == null) {
           // Lần đầu đăng nhập Google: Tự động gán vai trò Sinh viên mặc định với thông tin Google thật
+          // và đánh dấu chưa hoàn tất hồ sơ để nhắc người dùng bổ sung (cho phép "Để sau")
           profile = UserModel(
             uid: uid,
             name: user.displayName ?? googleUser.displayName ?? 'Người dùng Google',
             email: user.email ?? googleUser.email,
             avatarBase64OrUrl: user.photoURL ?? googleUser.photoUrl,
             role: UserRole.student,
+            isProfileCompleted: false,
             createdAt: DateFormat('dd/MM/yyyy HH:mm:ss').format(DateTime.now()),
           );
           await _userService.saveUserProfile(profile);
