@@ -176,7 +176,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     border: const OutlineInputBorder(),
                   ),
                 ),
-                if (selectedRole == UserRole.student) ...[
+                if (selectedRole == UserRole.student || user.isStaff) ...[
                   const SizedBox(height: 10),
                   TextField(
                     controller: studentCodeCtrl,
@@ -229,9 +229,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ? user.name
                       : nameCtrl.text.trim(),
                   organization: orgCtrl.text.trim(),
-                  studentCode: selectedRole == UserRole.student
-                      ? studentCodeCtrl.text.trim()
-                      : '',
+                  studentCode:
+                      (selectedRole == UserRole.student || user.isStaff)
+                          ? studentCodeCtrl.text.trim()
+                          : '',
                   headline: headlineCtrl.text.trim(),
                   bio: bioCtrl.text.trim(),
                   phone: phoneCtrl.text.trim(),

@@ -34,6 +34,13 @@ class UserService {
         .replaceAll(RegExp(r'[\s.#$\[\]/]+'), '_');
   }
 
+  /// Chuẩn hóa Họ tên làm khóa phụ trên /public_portfolios (hỗ trợ tài khoản Cán bộ / văn bằng thiếu MSSV)
+  static String normalizeNameKey(String name) {
+    final clean = normalizeStudentKey(name);
+    if (clean.isEmpty) return '';
+    return 'NAME_$clean';
+  }
+
   /// Kiểm tra Mã ủy quyền Cán bộ động từ nhánh `/system_config/staff_passcode_sha256` trên Firebase Realtime Database
   /// Kết hợp băm một chiều SHA-256 để không lưu mã gốc dạng chữ thuần trong mã nguồn Git.
   Future<bool> verifyStaffPasscode(String? inputPasscode) async {
@@ -87,49 +94,62 @@ class UserService {
     return true;
   }
 
-  /// Đồng bộ thông tin Portfolio công khai (ẩn số điện thoại) theo MSSV lên /public_portfolios.
+  /// Đồng bộ thông tin Portfolio công khai (ẩn số điện thoại) theo MSSV và Họ tên lên /public_portfolios.
   /// Nếu người dùng tắt công khai (`isPortfolioPublic == false`), xóa sạch thông tin cá nhân khỏi nhánh công khai.
   Future<void> syncPublicPortfolio(UserModel user) async {
     if (_publicPortfoliosRef == null) return;
-    final key = normalizeStudentKey(user.studentCode);
-    if (key.isEmpty) return;
+    final List<String> keys = <String>[
+      normalizeStudentKey(user.studentCode),
+      normalizeNameKey(user.name),
+    ].where((k) => k.isNotEmpty).toSet().toList();
+    if (keys.isEmpty) return;
+
+    final Map<String, dynamic> payload = !user.isPortfolioPublic
+        ? <String, dynamic>{
+            'ownerUid': user.uid,
+            'studentCode': user.studentCode.trim(),
+            'isPortfolioPublic': false,
+            'updatedAt': ServerValue.timestamp,
+          }
+        : <String, dynamic>{
+            'ownerUid': user.uid,
+            'name': user.name,
+            'email': user.email,
+            'avatarBase64OrUrl': user.avatarBase64OrUrl,
+            'role': user.role,
+            'organization': user.organization,
+            'studentCode': user.studentCode.trim(),
+            'headline': user.headline,
+            'bio': user.bio,
+            'portfolioUrl': user.portfolioUrl,
+            'isPortfolioPublic': true,
+            'createdAt': user.createdAt,
+            'updatedAt': ServerValue.timestamp,
+          };
 
     try {
-      if (!user.isPortfolioPublic) {
-        await _publicPortfoliosRef!.child(key).set(<String, dynamic>{
-          'ownerUid': user.uid,
-          'studentCode': user.studentCode.trim(),
-          'isPortfolioPublic': false,
-          'updatedAt': ServerValue.timestamp,
-        }).timeout(const Duration(seconds: 4));
-        return;
+      for (final key in keys) {
+        await _publicPortfoliosRef!
+            .child(key)
+            .set(payload)
+            .timeout(const Duration(seconds: 4));
       }
-
-      await _publicPortfoliosRef!.child(key).set(<String, dynamic>{
-        'ownerUid': user.uid,
-        'name': user.name,
-        'email': user.email,
-        'avatarBase64OrUrl': user.avatarBase64OrUrl,
-        'role': user.role,
-        'organization': user.organization,
-        'studentCode': user.studentCode.trim(),
-        'headline': user.headline,
-        'bio': user.bio,
-        'portfolioUrl': user.portfolioUrl,
-        'isPortfolioPublic': true,
-        'createdAt': user.createdAt,
-        'updatedAt': ServerValue.timestamp,
-      }).timeout(const Duration(seconds: 4));
     } catch (e) {
       debugPrint('[UserService] Không thể đồng bộ public_portfolios: $e');
     }
   }
 
-  /// Đọc thông tin Portfolio công khai của chủ văn bằng theo MSSV (ẩn số điện thoại)
-  Future<UserModel?> getPublicPortfolioByStudentCode(String studentCode) async {
-    if (_publicPortfoliosRef == null) return null;
-    final key = normalizeStudentKey(studentCode);
-    if (key.isEmpty) return null;
+  /// Đọc thông tin Portfolio công khai theo MSSV hoặc Họ tên (ẩn số điện thoại)
+  Future<UserModel?> getPublicPortfolioByStudentCode(String studentCode) {
+    return _getPublicPortfolioByKey(normalizeStudentKey(studentCode));
+  }
+
+  Future<UserModel?> getPublicPortfolioByName(String name) {
+    return _getPublicPortfolioByKey(normalizeNameKey(name));
+  }
+
+  Future<UserModel?> _getPublicPortfolioByKey(String key) async {
+    if (_publicPortfoliosRef == null || key.isEmpty) return null;
 
     try {
       final snapshot = await _publicPortfoliosRef!
