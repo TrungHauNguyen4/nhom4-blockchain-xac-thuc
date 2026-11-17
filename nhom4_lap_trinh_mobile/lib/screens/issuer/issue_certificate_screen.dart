@@ -691,7 +691,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
                         children: [
                           Text(
                             _selectedFileName ?? 'Tài liệu',
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
@@ -746,7 +746,6 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               controller: _studentNameController,
               decoration: const InputDecoration(
                 labelText: 'Họ và tên sinh viên *',
-                hintText: 'VD: Trần Minh Trí',
                 prefixIcon: Icon(Icons.person_outline),
                 border: OutlineInputBorder(),
               ),
@@ -762,7 +761,6 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               controller: _studentCodeController,
               decoration: const InputDecoration(
                 labelText: 'Mã số sinh viên (MSSV) *',
-                hintText: 'VD: 20261104',
                 prefixIcon: Icon(Icons.numbers),
                 border: OutlineInputBorder(),
               ),
@@ -778,7 +776,6 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               controller: _degreeNameController,
               decoration: const InputDecoration(
                 labelText: 'Tên văn bằng / Chứng chỉ *',
-                hintText: 'VD: Bằng Kỹ sư Công nghệ Thông tin',
                 prefixIcon: Icon(Icons.workspace_premium),
                 border: OutlineInputBorder(),
               ),
@@ -794,7 +791,6 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
               controller: _issuerNameController,
               decoration: const InputDecoration(
                 labelText: 'Đơn vị cấp phát *',
-                hintText: 'VD: Trường Đại học Công nghệ TP.HCM',
                 prefixIcon: Icon(Icons.account_balance),
                 border: OutlineInputBorder(),
               ),

@@ -317,35 +317,58 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ========================================================
-  // [UPDATE PROFILE] Cập nhật thông tin cá nhân
+  // [UPDATE PROFILE] Cập nhật thông tin cá nhân & Portfolio
   // ========================================================
   Future<bool> updateProfile({
     required String name,
     required String organization,
     String? studentCode,
+    String? headline,
+    String? bio,
+    String? phone,
+    String? portfolioUrl,
+    String? role,
+    bool markCompleted = true,
   }) async {
     if (_currentUser == null) return false;
 
     _isLoading = true;
     notifyListeners();
 
-    final ok = await _userService.updateDetails(
-      uid: _currentUser!.uid,
+    final String nextRole =
+        (role == UserRole.student || role == UserRole.employer)
+            ? role!
+            : _currentUser!.role;
+
+    final updated = _currentUser!.copyWith(
       name: name,
       organization: organization,
-      studentCode: studentCode,
+      studentCode: studentCode ?? _currentUser!.studentCode,
+      headline: headline ?? _currentUser!.headline,
+      bio: bio ?? _currentUser!.bio,
+      phone: phone ?? _currentUser!.phone,
+      portfolioUrl: portfolioUrl ?? _currentUser!.portfolioUrl,
+      role: nextRole,
+      originalRole: nextRole != UserRole.staff ? nextRole : _currentUser!.originalRole,
+      isProfileCompleted: markCompleted ? true : _currentUser!.isProfileCompleted,
     );
 
+    final ok = await _userService.saveUserProfile(updated);
     if (ok) {
-      _currentUser = _currentUser!.copyWith(
-        name: name,
-        organization: organization,
-        studentCode: studentCode ?? _currentUser!.studentCode,
-      );
+      _currentUser = updated;
     }
     _isLoading = false;
     notifyListeners();
     return ok;
+  }
+
+  /// Người dùng chọn "Để sau" khi đăng nhập Gmail lần đầu -> không hiện lại popup nữa
+  Future<void> dismissFirstTimeOnboarding() async {
+    if (_currentUser == null || _currentUser!.isProfileCompleted) return;
+    final updated = _currentUser!.copyWith(isProfileCompleted: true);
+    _currentUser = updated;
+    notifyListeners();
+    await _userService.saveUserProfile(updated);
   }
 
   // ========================================================

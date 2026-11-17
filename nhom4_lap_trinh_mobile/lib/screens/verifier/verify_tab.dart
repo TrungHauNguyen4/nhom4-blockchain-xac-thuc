@@ -612,7 +612,7 @@ class _VerifyTabState extends State<VerifyTab> {
                 Expanded(
                   child: Text(
                     'Tệp đang kiểm tra: $_selectedFileName ($kb KB)',
-                    maxLines: 1,
+                    maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5),
                   ),

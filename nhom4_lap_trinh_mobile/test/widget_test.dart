@@ -374,7 +374,11 @@ void main() {
       } else {
         await tester.pumpAndSettle();
       }
-      expect(tester.takeException(), isNull);
+      expect(
+        tester.takeException(),
+        isNull,
+        reason: 'Overflow on ${screen.runtimeType}',
+      );
     }
 
     // Kiểm tra cả 4 Tab trên HomeScreen ở chế độ dọc hẹp
@@ -873,5 +877,68 @@ void main() {
     expect(both.keccak256, syncKeccak);
     expect(both.sha256, syncSha);
     expect(asyncSingle, syncSha);
+  });
+
+  testWidgets(
+      'Portfolio Profile & Google Onboarding - Hiển thị đầy đủ trường Portfolio, cảnh báo thiếu thông tin & nút Để sau',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final googleNewUser = UserModel(
+      uid: 'google_uid_1',
+      name: 'Nguyễn Google',
+      email: 'google@gmail.com',
+      role: UserRole.student,
+      isProfileCompleted: false,
+      createdAt: '17/11/2026',
+    );
+    expect(googleNewUser.hasMissingPortfolioInfo, isTrue);
+
+    final authProvider = _createAuthenticatedTestProvider(googleNewUser);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiService>(create: (_) => ApiService()),
+          ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ],
+        child: const MaterialApp(home: HomeScreen()),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // 1. Hiện hộp thoại Hoàn tất hồ sơ lần đầu với nút "Để sau"
+    expect(find.text('Hoàn tất hồ sơ lần đầu'), findsOneWidget);
+    expect(find.text('Để sau'), findsOneWidget);
+
+    // 2. Bấm "Để sau" -> đóng hộp thoại & đánh dấu đã nhắc
+    await tester.tap(find.text('Để sau'));
+    await tester.pumpAndSettle();
+    expect(find.text('Hoàn tất hồ sơ lần đầu'), findsNothing);
+    expect(authProvider.currentUser?.isProfileCompleted, isTrue);
+
+    // 3. Mở ProfileScreen -> hiển thị Portfolio & cảnh báo bổ sung thông tin
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiService>(create: (_) => ApiService()),
+          ChangeNotifierProvider<ThemeProvider>(create: (_) => ThemeProvider()),
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ],
+        child: const MaterialApp(home: ProfileScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hồ Sơ & Portfolio'), findsOneWidget);
+    expect(find.text('Hồ sơ Portfolio chưa đầy đủ'), findsOneWidget);
+    await tester.scrollUntilVisible(find.text('Giới Thiệu Bản Thân'), 200);
+    expect(find.text('Giới Thiệu Bản Thân'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('Thông Tin Định Danh & Liên Hệ'),
+      200,
+    );
+    expect(find.text('Thông Tin Định Danh & Liên Hệ'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

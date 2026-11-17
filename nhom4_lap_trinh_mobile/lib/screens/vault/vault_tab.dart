@@ -610,7 +610,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                         Expanded(
                           child: Text(
                             item.degreeName ?? item.fileName,
-                            maxLines: 1,
+                            maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
                               fontWeight: FontWeight.bold,
@@ -625,7 +625,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                       item.isValid
                           ? 'Hợp lệ • ${item.issuerName ?? "Phòng Đào Tạo"}'
                           : 'Cảnh báo: Không tồn tại trên Blockchain',
-                      maxLines: 1,
+                      maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,

@@ -4,6 +4,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/db_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -14,6 +15,28 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final ImagePicker _picker = ImagePicker();
+  int _savedCertCount = 0;
+  int _scanHistoryCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPortfolioStats();
+  }
+
+  Future<void> _loadPortfolioStats() async {
+    try {
+      final saved = await DatabaseService.instance.getAllCertificates();
+      final history = await DatabaseService.instance.getAllScanHistory();
+      if (!mounted) return;
+      setState(() {
+        _savedCertCount = saved.length;
+        _scanHistoryCount = history.length;
+      });
+    } catch (_) {
+      // An toàn khi chạy trong môi trường widget test không có native Sqflite
+    }
+  }
 
   Future<void> _pickAvatar(ImageSource source) async {
     try {
@@ -85,56 +108,143 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final nameCtrl = TextEditingController(text: user.name);
     final orgCtrl = TextEditingController(text: user.organization);
     final studentCodeCtrl = TextEditingController(text: user.studentCode);
+    final headlineCtrl = TextEditingController(text: user.headline);
+    final bioCtrl = TextEditingController(text: user.bio);
+    final phoneCtrl = TextEditingController(text: user.phone);
+    final portfolioCtrl = TextEditingController(text: user.portfolioUrl);
+    String selectedRole = user.role;
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Chỉnh sửa thông tin'),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameCtrl,
-                decoration: const InputDecoration(labelText: 'Họ và tên'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: orgCtrl,
-                decoration: InputDecoration(
-                  labelText: user.isEmployer
-                      ? 'Tên Doanh nghiệp'
-                      : 'Trường học / Đơn vị đào tạo',
-                ),
-              ),
-              if (user.isStudent) ...[
-                const SizedBox(height: 12),
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Chỉnh sửa Portfolio cá nhân'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                if (!user.isStaff) ...[
+                  const Text(
+                    'Vai trò hiển thị:',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+                  ),
+                  const SizedBox(height: 6),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Sinh viên'),
+                        selected: selectedRole == UserRole.student,
+                        onSelected: (_) => setDialogState(
+                          () => selectedRole = UserRole.student,
+                        ),
+                      ),
+                      ChoiceChip(
+                        label: const Text('Nhà tuyển dụng'),
+                        selected: selectedRole == UserRole.employer,
+                        onSelected: (_) => setDialogState(
+                          () => selectedRole = UserRole.employer,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                ],
                 TextField(
-                  controller: studentCodeCtrl,
-                  decoration: const InputDecoration(labelText: 'Mã số sinh viên (MSSV)'),
+                  controller: nameCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Họ và tên',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: headlineCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'Chuyên ngành / Chức danh',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: orgCtrl,
+                  decoration: InputDecoration(
+                    labelText: selectedRole == UserRole.employer
+                        ? 'Tên Doanh nghiệp'
+                        : 'Trường học / Đơn vị đào tạo',
+                    border: const OutlineInputBorder(),
+                  ),
+                ),
+                if (selectedRole == UserRole.student) ...[
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: studentCodeCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Mã số sinh viên (MSSV)',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                TextField(
+                  controller: bioCtrl,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Giới thiệu bản thân',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Số điện thoại',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: portfolioCtrl,
+                  keyboardType: TextInputType.url,
+                  decoration: const InputDecoration(
+                    labelText: 'Liên kết GitHub / LinkedIn / Portfolio',
+                    border: OutlineInputBorder(),
+                  ),
                 ),
               ],
-            ],
+            ),
           ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('Hủy'),
+            ),
+            ElevatedButton(
+              onPressed: () async {
+                final authProvider = context.read<AuthProvider>();
+                await authProvider.updateProfile(
+                  name: nameCtrl.text.trim().isEmpty
+                      ? user.name
+                      : nameCtrl.text.trim(),
+                  organization: orgCtrl.text.trim(),
+                  studentCode: selectedRole == UserRole.student
+                      ? studentCodeCtrl.text.trim()
+                      : '',
+                  headline: headlineCtrl.text.trim(),
+                  bio: bioCtrl.text.trim(),
+                  phone: phoneCtrl.text.trim(),
+                  portfolioUrl: portfolioCtrl.text.trim(),
+                  role: user.isStaff ? null : selectedRole,
+                  markCompleted: true,
+                );
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              },
+              child: const Text('Lưu thay đổi'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Hủy'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final authProvider = context.read<AuthProvider>();
-              await authProvider.updateProfile(
-                name: nameCtrl.text.trim(),
-                organization: orgCtrl.text.trim(),
-                studentCode: studentCodeCtrl.text.trim(),
-              );
-              if (context.mounted) Navigator.pop(context);
-            },
-            child: const Text('Lưu thay đổi'),
-          ),
-        ],
       ),
     );
   }
@@ -310,9 +420,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Hồ Sơ Cá Nhân'),
+        title: const FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text('Hồ Sơ & Portfolio'),
+        ),
         actions: [
           IconButton(
+            tooltip: 'Chỉnh sửa Portfolio',
             icon: const Icon(Icons.edit_outlined),
             onPressed: () => _showEditProfileDialog(user),
           ),
@@ -321,36 +436,66 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          // Header: Ảnh đại diện & Tên
-          Center(
+          // 1. PORTFOLIO HERO BANNER
+          Container(
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF031226),
+                  Color(0xFF0D2B4E),
+                  Color(0xFF18181A),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(22),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.16),
+                  blurRadius: 16,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
                 Stack(
                   children: [
-                    CircleAvatar(
-                      radius: 54,
-                      backgroundColor: theme.colorScheme.primaryContainer,
-                      backgroundImage: _getAvatarImage(user.avatarBase64OrUrl),
-                      onBackgroundImageError:
-                          _getAvatarImage(user.avatarBase64OrUrl) != null
-                              ? (_, _) {}
-                              : null,
-                      child: _getAvatarImage(user.avatarBase64OrUrl) == null
-                          ? Icon(
-                              Icons.person,
-                              size: 58,
-                              color: theme.colorScheme.onPrimaryContainer,
-                            )
-                          : null,
+                    Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: const Color(0xFF38BDF8).withValues(alpha: 0.7),
+                          width: 2.2,
+                        ),
+                      ),
+                      child: CircleAvatar(
+                        radius: 48,
+                        backgroundColor: const Color(0xFF0D2B4E),
+                        backgroundImage: _getAvatarImage(user.avatarBase64OrUrl),
+                        onBackgroundImageError:
+                            _getAvatarImage(user.avatarBase64OrUrl) != null
+                                ? (_, _) {}
+                                : null,
+                        child: _getAvatarImage(user.avatarBase64OrUrl) == null
+                            ? const Icon(
+                                Icons.person,
+                                size: 52,
+                                color: Color(0xFFECEBE6),
+                              )
+                            : null,
+                      ),
                     ),
                     Positioned(
                       bottom: 0,
                       right: 0,
                       child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: theme.colorScheme.primary,
+                        radius: 17,
+                        backgroundColor: const Color(0xFF1DA1F2),
                         child: IconButton(
-                          iconSize: 18,
+                          iconSize: 17,
                           color: Colors.white,
                           icon: const Icon(Icons.camera_alt),
                           onPressed: _showAvatarOptions,
@@ -365,22 +510,176 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   textAlign: TextAlign.center,
                   style: theme.textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.bold,
+                    color: const Color(0xFFECEBE6),
                   ),
                 ),
+                if (user.headline.trim().isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    user.headline,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Color(0xFF38BDF8),
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 4),
                 Text(
                   user.email,
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: theme.colorScheme.onSurfaceVariant),
+                  style: TextStyle(
+                    color: const Color(0xFFECEBE6).withValues(alpha: 0.78),
+                    fontSize: 12.5,
+                  ),
                 ),
                 const SizedBox(height: 10),
                 _buildRoleBadge(user.role),
+                const SizedBox(height: 14),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFFECEBE6),
+                    side: BorderSide(
+                      color: Colors.white.withValues(alpha: 0.35),
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                  ),
+                  icon: const Icon(Icons.edit_note, size: 18),
+                  label: const FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text('Cập nhật Portfolio'),
+                  ),
+                  onPressed: () => _showEditProfileDialog(user),
+                ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 16),
 
-          // Chi tiết hồ sơ
+          // Nhắc bổ sung thông tin nếu đăng nhập Gmail lần đầu hoặc còn thiếu
+          if (user.hasMissingPortfolioInfo) ...[
+            Card(
+              color: Colors.amber.withValues(alpha: 0.14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+                side: BorderSide(
+                  color: Colors.amber.shade700.withValues(alpha: 0.5),
+                ),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.info_outline, color: Colors.amber, size: 20),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Hồ sơ Portfolio chưa đầy đủ',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13.5,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Bạn có thể bổ sung Trường học/Đơn vị, MSSV và Giới thiệu bản thân để trang Portfolio hiển thị chuyên nghiệp hơn.',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: FilledButton.tonalIcon(
+                        icon: const Icon(Icons.edit, size: 16),
+                        label: const Text('Bổ sung ngay'),
+                        onPressed: () => _showEditProfileDialog(user),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // 2. THỐNG KÊ HOẠT ĐỘNG CÁ NHÂN
+          Row(
+            children: [
+              Expanded(
+                child: _buildPortfolioMetricCard(
+                  icon: Icons.folder_special_outlined,
+                  color: Colors.teal,
+                  value: '$_savedCertCount',
+                  label: 'Văn bằng đã lưu',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildPortfolioMetricCard(
+                  icon: Icons.qr_code_scanner_rounded,
+                  color: Colors.blue,
+                  value: '$_scanHistoryCount',
+                  label: 'Lượt tra cứu',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+
+          // 3. GIỚI THIỆU BẢN THÂN (BIO)
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.person_pin_outlined,
+                        size: 20,
+                        color: theme.colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      const Expanded(
+                        child: Text(
+                          'Giới Thiệu Bản Thân',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 15,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Divider(height: 20),
+                  Text(
+                    user.bio.trim().isNotEmpty
+                        ? user.bio
+                        : 'Chưa có lời giới thiệu. Nhấn "Cập nhật Portfolio" để thêm mô tả về chuyên môn, mục tiêu nghề nghiệp hoặc thành tích của bạn.',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      height: 1.45,
+                      color: user.bio.trim().isNotEmpty
+                          ? null
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // 4. CHI TIẾT HỒ SƠ & LIÊN HỆ
           Card(
             child: Padding(
               padding: const EdgeInsets.all(16.0),
@@ -388,7 +687,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Thông Tin Tài Khoản',
+                    'Thông Tin Định Danh & Liên Hệ',
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                   ),
                   const Divider(height: 20),
@@ -399,14 +698,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ? user.organization
                         : 'Chưa cập nhật',
                   ),
-                  if (user.isStudent && user.studentCode.isNotEmpty) ...[
+                  if (user.isStudent) ...[
                     const SizedBox(height: 12),
                     _buildInfoRow(
                       Icons.badge,
                       'Mã sinh viên (MSSV)',
-                      user.studentCode,
+                      user.studentCode.isNotEmpty
+                          ? user.studentCode
+                          : 'Chưa cập nhật',
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  _buildInfoRow(
+                    Icons.phone_outlined,
+                    'Số điện thoại',
+                    user.phone.isNotEmpty ? user.phone : 'Chưa cập nhật',
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInfoRow(
+                    Icons.link_rounded,
+                    'Liên kết Portfolio / GitHub',
+                    user.portfolioUrl.isNotEmpty
+                        ? user.portfolioUrl
+                        : 'Chưa cập nhật',
+                  ),
                   const SizedBox(height: 12),
                   _buildInfoRow(
                     Icons.calendar_today,
@@ -553,15 +868,67 @@ class _ProfileScreenState extends State<ProfileScreen> {
         children: [
           Icon(icon, size: 16, color: text),
           const SizedBox(width: 6),
-          Text(
-            UserRole.getRoleLabel(role),
-            style: TextStyle(
-              color: text,
-              fontWeight: FontWeight.bold,
-              fontSize: 13,
+          Flexible(
+            child: Text(
+              UserRole.getRoleLabel(role),
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: text,
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+              ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPortfolioMetricCard({
+    required IconData icon,
+    required Color color,
+    required String value,
+    required String label,
+  }) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  radius: 15,
+                  backgroundColor: color.withValues(alpha: 0.14),
+                  child: Icon(icon, color: color, size: 17),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: color,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              label,
+              softWrap: true,
+              style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+            ),
+          ],
+        ),
       ),
     );
   }
