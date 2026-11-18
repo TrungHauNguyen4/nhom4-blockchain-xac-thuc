@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../../models/certificate_record.dart';
 import '../../models/scan_history_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../widgets/certificate_card.dart';
 import '../../widgets/pagination_controls.dart';
@@ -16,48 +17,83 @@ class VaultTab extends StatefulWidget {
   State<VaultTab> createState() => VaultTabState();
 }
 
-class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin {
-  late final TabController _subTabController;
+class VaultTabState extends State<VaultTab> {
   final TextEditingController _searchController = TextEditingController();
 
   List<CertificateRecord> _certificates = [];
   List<ScanHistoryModel> _scanHistory = [];
+  List<CertificateRecord> _mySignedCerts = [];
   bool _isLoading = false;
   String _historyFilter = 'ALL'; // 'ALL', 'VALID', 'INVALID', 'QR', 'FILE'
   int _certPage = 1;
   int _historyPage = 1;
+  int _signedPage = 1;
 
   @override
   void initState() {
     super.initState();
-    _subTabController = TabController(length: 2, vsync: this);
     reloadData();
   }
 
   @override
   void dispose() {
-    _subTabController.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  // [READ] Tải hoặc tìm kiếm dữ liệu Offline từ Sqflite (Chuẩn Chương 11 flutter_demo)
+  // [READ] Tải hoặc tìm kiếm dữ liệu Offline từ Sqflite & văn bằng đã ký cho Sinh viên
   Future<void> reloadData() async {
     if (!mounted) return;
     setState(() {
       _isLoading = true;
       _certPage = 1;
       _historyPage = 1;
+      _signedPage = 1;
     });
 
     final keyword = _searchController.text.trim();
     final certs = await DatabaseService.instance.searchCertificates(keyword);
     final history = await DatabaseService.instance.searchScanHistory(keyword);
 
+    List<CertificateRecord> signedCerts = [];
+    if (mounted) {
+      final currentUser =
+          Provider.of<AuthProvider?>(context, listen: false)?.currentUser;
+      if (currentUser != null && currentUser.isStudent) {
+        final studentCode = currentUser.studentCode.trim();
+        final studentName = currentUser.name.trim();
+        final lookup = studentCode.isNotEmpty ? studentCode : studentName;
+        if (lookup.isNotEmpty) {
+          try {
+            final api = Provider.of<ApiService?>(context, listen: false) ??
+                ApiService();
+            final fetched = await api.fetchIssuedCertificates(keyword: lookup);
+            final lowerCode = studentCode.toLowerCase();
+            final lowerName = studentName.toLowerCase();
+            final lowerKw = keyword.toLowerCase();
+
+            signedCerts = fetched.where((c) {
+              final matchesOwner = studentCode.isNotEmpty
+                  ? (c.studentCode ?? '').trim().toLowerCase() == lowerCode
+                  : (c.studentName ?? '').trim().toLowerCase() == lowerName;
+              if (!matchesOwner) return false;
+              if (lowerKw.isEmpty) return true;
+              return (c.degreeName ?? '').toLowerCase().contains(lowerKw) ||
+                  c.fileName.toLowerCase().contains(lowerKw) ||
+                  c.issuerName.toLowerCase().contains(lowerKw) ||
+                  (c.studentCode ?? '').toLowerCase().contains(lowerKw) ||
+                  (c.studentName ?? '').toLowerCase().contains(lowerKw);
+            }).toList();
+          } catch (_) {}
+        }
+      }
+    }
+
     if (!mounted) return;
     setState(() {
       _certificates = certs;
       _scanHistory = history;
+      _mySignedCerts = signedCerts;
       _isLoading = false;
     });
   }
@@ -152,8 +188,13 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
         _searchController.text.trim().toLowerCase() ==
             myStudentCode.toLowerCase();
 
-    return Column(
-      children: [
+    final bool isStudent = currentUser?.isStudent ?? false;
+
+    return DefaultTabController(
+      key: ValueKey<String>('vault_tabs_${isStudent ? 3 : 2}'),
+      length: isStudent ? 3 : 2,
+      child: Column(
+        children: [
         // Thanh tìm kiếm & TabBar con phong cách Glassy Pill V7
         Container(
           padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
@@ -306,7 +347,6 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                   ),
                 ),
                 child: TabBar(
-                  controller: _subTabController,
                   dividerColor: Colors.transparent,
                   splashFactory: NoSplash.splashFactory,
                   overlayColor: WidgetStateProperty.all(Colors.transparent),
@@ -342,7 +382,7 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                             const Icon(Icons.bookmark_added_outlined, size: 17),
                             const SizedBox(width: 6),
                             Text(
-                              'Sổ tay đã lưu (${_certificates.length})',
+                              'Sổ tay (${_certificates.length})',
                               style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ],
@@ -359,13 +399,32 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
                             const Icon(Icons.history, size: 17),
                             const SizedBox(width: 6),
                             Text(
-                              'Lịch sử tra cứu (${_scanHistory.length})',
+                              'Lịch sử (${_scanHistory.length})',
                               style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ],
                         ),
                       ),
                     ),
+                    if (isStudent)
+                      Tab(
+                        height: 38,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.verified_outlined, size: 17),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Đã ký (${_mySignedCerts.length})',
+                                style:
+                                    const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -373,17 +432,135 @@ class VaultTabState extends State<VaultTab> with SingleTickerProviderStateMixin 
           ),
         ),
 
-        // Nội dung 2 ngăn: Bắt buộc bọc OrientationBuilder (1 cột dọc <-> 2 cột ngang)
+        // Nội dung các ngăn: Bắt buộc bọc OrientationBuilder (1 cột dọc <-> 2 cột ngang)
         Expanded(
           child: _isLoading
               ? const Center(child: CircularProgressIndicator())
               : TabBarView(
-                  controller: _subTabController,
                   children: [
                     _buildCertificatesVaultView(),
                     _buildScanHistoryView(),
+                    if (isStudent) _buildMySignedCertificatesView(),
                   ],
                 ),
+        ),
+      ],
+    ),
+    );
+  }
+
+  // ========================================================
+  // NGĂN 3 (SINH VIÊN): VĂN BẰNG CỦA TÔI ĐÃ ĐƯỢC KÝ XÁC NHẬN
+  // ========================================================
+  Widget _buildMySignedCertificatesView() {
+    if (_mySignedCerts.isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.workspace_premium_outlined,
+                size: 68,
+                color: Colors.grey.shade400,
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                'Chưa có văn bằng nào được ký xác nhận cho tài khoản của bạn',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.grey,
+                ),
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                'Hãy đảm bảo Mã số sinh viên (MSSV) trong Hồ sơ cá nhân khớp với MSSV trên văn bằng được nhà trường cấp.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 12.5, color: Colors.grey),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final pagedSigned = PaginationControls.slicePage(
+      _mySignedCerts,
+      currentPage: _signedPage,
+    );
+
+    return Column(
+      children: [
+        Expanded(
+          child: OrientationBuilder(
+            builder: (context, orientation) {
+              final int columnCount =
+                  MediaQuery.orientationOf(context) == Orientation.portrait
+                      ? 1
+                      : 2;
+
+              if (columnCount == 1) {
+                return ListView.separated(
+                  padding: const EdgeInsets.all(12),
+                  itemCount: pagedSigned.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 12),
+                  itemBuilder: (context, index) {
+                    final item = pagedSigned[index];
+                    return CertificateCard(
+                      record: item,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => VerifyDetailScreen(
+                              record: item,
+                              searchedHash: item.dataHash,
+                            ),
+                          ),
+                        ).then((_) => reloadData());
+                      },
+                    );
+                  },
+                );
+              }
+
+              return GridView.builder(
+                padding: const EdgeInsets.all(12),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                  mainAxisExtent: 205,
+                ),
+                itemCount: pagedSigned.length,
+                itemBuilder: (context, index) {
+                  final item = pagedSigned[index];
+                  return CertificateCard(
+                    record: item,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => VerifyDetailScreen(
+                            record: item,
+                            searchedHash: item.dataHash,
+                          ),
+                        ),
+                      ).then((_) => reloadData());
+                    },
+                  );
+                },
+              );
+            },
+          ),
+        ),
+        PaginationControls(
+          currentPage: _signedPage,
+          totalItems: _mySignedCerts.length,
+          onPageChanged: (p) => setState(() => _signedPage = p),
         ),
       ],
     );
