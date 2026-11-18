@@ -7,6 +7,7 @@ import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../services/hr_review_service.dart';
 import '../../widgets/pagination_controls.dart';
+import '../requests/submit_signing_request_screen.dart';
 import '../verifier/verify_detail_screen.dart';
 import 'hr_audit_report_screen.dart';
 
@@ -287,15 +288,65 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
       ),
     ];
 
-    return IntrinsicHeight(
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Expanded(child: _buildKpiTile(items[0])),
-          const SizedBox(width: 10),
-          Expanded(child: _buildKpiTile(items[1])),
-        ],
-      ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Expanded(child: _buildKpiTile(items[0])),
+              const SizedBox(width: 10),
+              Expanded(child: _buildKpiTile(items[1])),
+            ],
+          ),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SubmitSigningRequestScreen(),
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.folder_shared_outlined, size: 18),
+                label: const Text('Gửi Folder yêu cầu ký'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.teal,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 11),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SubmitSigningRequestScreen(
+                      initialTabIndex: 1,
+                    ),
+                  ),
+                );
+              },
+              icon: const Icon(Icons.history_edu, size: 18),
+              label: const Text('Đã gửi'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 11,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 
