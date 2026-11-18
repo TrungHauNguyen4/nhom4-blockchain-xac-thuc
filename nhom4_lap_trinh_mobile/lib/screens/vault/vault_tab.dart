@@ -8,6 +8,7 @@ import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../widgets/certificate_card.dart';
 import '../../widgets/pagination_controls.dart';
+import '../requests/submit_signing_request_screen.dart';
 import '../verifier/verify_detail_screen.dart';
 
 class VaultTab extends StatefulWidget {
@@ -298,37 +299,68 @@ class VaultTabState extends State<VaultTab> {
                   ),
                 ],
               ),
-              if (myStudentCode != null) ...[
+              if (myStudentCode != null || isStudent) ...[
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: ActionChip(
-                    avatar: Icon(
-                      isFilteringMyStudentCode
-                          ? Icons.check_circle
-                          : Icons.school_outlined,
-                      size: 16,
-                      color: isFilteringMyStudentCode
-                          ? Colors.teal
-                          : Colors.blueAccent,
-                    ),
-                    label: Text(
-                      isFilteringMyStudentCode
-                          ? 'Đang lọc văn bằng của tôi ($myStudentCode) • Nhấn để bỏ lọc'
-                          : '🎓 Văn bằng của tôi (MSSV: $myStudentCode)',
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    onPressed: () {
-                      if (isFilteringMyStudentCode) {
-                        _searchController.clear();
-                      } else {
-                        _searchController.text = myStudentCode;
-                      }
-                      reloadData();
-                    },
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      if (myStudentCode != null)
+                        ActionChip(
+                          avatar: Icon(
+                            isFilteringMyStudentCode
+                                ? Icons.check_circle
+                                : Icons.school_outlined,
+                            size: 16,
+                            color: isFilteringMyStudentCode
+                                ? Colors.teal
+                                : Colors.blueAccent,
+                          ),
+                          label: Text(
+                            isFilteringMyStudentCode
+                                ? 'Đang lọc văn bằng của tôi ($myStudentCode) • Nhấn để bỏ lọc'
+                                : '🎓 Văn bằng của tôi (MSSV: $myStudentCode)',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: () {
+                            if (isFilteringMyStudentCode) {
+                              _searchController.clear();
+                            } else {
+                              _searchController.text = myStudentCode;
+                            }
+                            reloadData();
+                          },
+                        ),
+                      if (isStudent)
+                        ActionChip(
+                          avatar: const Icon(
+                            Icons.send_and_archive,
+                            size: 16,
+                            color: Colors.teal,
+                          ),
+                          label: const Text(
+                            'Gửi yêu cầu ký tài liệu',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const SubmitSigningRequestScreen(),
+                              ),
+                            );
+                          },
+                        ),
+                    ],
                   ),
                 ),
               ],

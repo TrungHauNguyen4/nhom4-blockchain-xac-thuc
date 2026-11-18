@@ -2,13 +2,17 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
+import '../../models/notification_model.dart';
 import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/signing_request_service.dart';
 import '../../widgets/glass_widgets.dart';
 import '../auth/profile_screen.dart';
 import '../employer/employer_audit_tab.dart';
 import '../issuer/issue_certificate_screen.dart';
 import '../issuer/issued_list_screen.dart';
+import '../issuer/signing_requests_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../settings/settings_tab.dart';
 import '../vault/vault_tab.dart';
 import 'verify_tab.dart';
@@ -233,8 +237,10 @@ class _HomeScreenState extends State<HomeScreen> {
         },
       ),
       VaultTab(key: _vaultKey),
-      if (isStaff)
+      if (isStaff) ...[
         widget.issuerTab ?? const IssueCertificateScreen(isEmbedded: true),
+        const SigningRequestsScreen(isEmbedded: true),
+      ],
       if (isEmployer)
         widget.employerTab ?? EmployerAuditTab(key: _employerAuditKey),
       widget.settingsTab ?? const SettingsTab(),
@@ -251,12 +257,18 @@ class _HomeScreenState extends State<HomeScreen> {
         selectedIcon: Icons.folder_special,
         label: 'Sổ tay & Lịch sử',
       ),
-      if (isStaff)
-        const GlassNavItem(
+      if (isStaff) ...const [
+        GlassNavItem(
           icon: Icons.workspace_premium_outlined,
           selectedIcon: Icons.workspace_premium,
           label: 'Cấp bằng',
         ),
+        GlassNavItem(
+          icon: Icons.inbox_outlined,
+          selectedIcon: Icons.inbox,
+          label: 'Tiếp nhận',
+        ),
+      ],
       if (isEmployer)
         const GlassNavItem(
           icon: Icons.business_center_outlined,
@@ -329,6 +341,31 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: 'Làm mới bảng thẩm định HR',
               icon: const Icon(Icons.refresh),
               onPressed: () => _employerAuditKey.currentState?.reloadAuditData(),
+            ),
+          if (user != null)
+            StreamBuilder<List<AppNotificationModel>>(
+              stream: SigningRequestService().streamNotifications(user.uid),
+              builder: (context, snapshot) {
+                final unreadCount = (snapshot.data ?? const [])
+                    .where((n) => !n.isRead)
+                    .length;
+                return IconButton(
+                  tooltip: 'Thông báo',
+                  icon: Badge(
+                    isLabelVisible: unreadCount > 0,
+                    label: Text('$unreadCount'),
+                    child: const Icon(Icons.notifications_outlined),
+                  ),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    );
+                  },
+                );
+              },
             ),
           if (authProvider != null)
             IconButton(
@@ -403,6 +440,8 @@ class _HomeScreenState extends State<HomeScreen> {
         case 2:
           return 'Cấp Phát Văn Bằng Mới';
         case 3:
+          return 'Tiếp Nhận Yêu Cầu Ký';
+        case 4:
           return 'Cài Đặt Ứng Dụng';
         default:
           return 'Xác Thực Văn Bằng';
