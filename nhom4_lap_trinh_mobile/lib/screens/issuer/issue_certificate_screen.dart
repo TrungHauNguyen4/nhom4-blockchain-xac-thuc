@@ -281,6 +281,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
 
     final confirmed = await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Row(
           children: [
