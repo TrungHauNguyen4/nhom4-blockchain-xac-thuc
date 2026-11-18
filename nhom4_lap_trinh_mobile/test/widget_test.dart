@@ -16,6 +16,7 @@ import 'package:nhom4_lap_trinh_mobile/screens/auth/register_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/home_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/issue_certificate_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/issued_list_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/vault/vault_tab.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/verifier/public_portfolio_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/verify_detail_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
@@ -76,6 +77,19 @@ class _FakeLedgerApiService extends ApiService {
     String fileName = 'Văn bằng kiểm tra',
   }) async {
     return _ledger[hash.trim().toLowerCase()];
+  }
+
+  @override
+  Future<List<CertificateRecord>> fetchIssuedCertificates({
+    String keyword = '',
+  }) async {
+    final kw = keyword.trim().toLowerCase();
+    return _ledger.values.where((c) {
+      if (kw.isEmpty) return true;
+      return (c.studentCode ?? '').toLowerCase().contains(kw) ||
+          (c.studentName ?? '').toLowerCase().contains(kw) ||
+          (c.degreeName ?? '').toLowerCase().contains(kw);
+    }).toList();
   }
 }
 
@@ -1046,5 +1060,50 @@ void main() {
     );
     expect(authProvider.currentUser?.role, UserRole.student);
     expect(authProvider.currentUser?.studentCode, '0023411914');
+  });
+
+  testWidgets(
+      'Student VaultTab Signed Certificates - Sinh viên xem được mục Đã ký (văn bằng đã được ký xác nhận)',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    final fakeApi = _FakeLedgerApiService();
+    await fakeApi.notarizeCertificate(
+      dataHash:
+          '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      fileName: 'Bang_Ky_Su.pdf',
+      studentName: 'Sinh Viên Test',
+      studentCode: '0023411914',
+      degreeName: 'Kỹ sư Khoa học máy tính',
+      issuerName: 'Đại học Đồng Tháp',
+    );
+
+    final student = UserModel(
+      uid: 'sv_vault_1',
+      name: 'Sinh Viên Test',
+      email: 'sv@dthu.edu.vn',
+      role: UserRole.student,
+      studentCode: '0023411914',
+      organization: 'Đại học Đồng Tháp',
+      createdAt: '2026-01-01',
+    );
+    final authProvider = _createAuthenticatedTestProvider(student);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiService>.value(value: fakeApi),
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ],
+        child: const MaterialApp(home: Scaffold(body: VaultTab())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Đã ký (1)'), findsOneWidget);
+    await tester.tap(find.text('Đã ký (1)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Kỹ sư Khoa học máy tính'), findsOneWidget);
+    expect(tester.takeException(), isNull);
   });
 }

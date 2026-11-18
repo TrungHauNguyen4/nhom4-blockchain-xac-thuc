@@ -30,3 +30,8 @@ hoc_dart/
 .DS_Store
 Thumbs.db
 ~$*
+
+# 4. Android Release Keystore & Signing Config (không đẩy lên Git công khai)
+**/*.jks
+**/*.keystore
+**/android/key.properties
