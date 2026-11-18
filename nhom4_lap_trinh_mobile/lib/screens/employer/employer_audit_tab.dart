@@ -28,7 +28,6 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
   final TextEditingController _candidateSearchController =
       TextEditingController();
 
-  bool _isLoadingStats = false;
   bool _isSearchingCandidates = false;
   String? _searchError;
 
@@ -55,7 +54,6 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
   /// Tải lại thống kê quét từ Sqflite và danh sách đánh giá HR từ SharedPreferences
   Future<void> reloadAuditData() async {
     if (!mounted) return;
-    setState(() => _isLoadingStats = true);
     final uid = Provider.of<AuthProvider?>(context, listen: false)
         ?.currentUser
         ?.uid;
@@ -73,13 +71,8 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
         _invalidScans = invalid;
         _hrReviews = loadedReviews;
         _reviewPage = 1;
-        _isLoadingStats = false;
       });
-    } catch (_) {
-      if (mounted) {
-        setState(() => _isLoadingStats = false);
-      }
-    }
+    } catch (_) {}
   }
 
   /// Tra cứu danh sách văn bằng của ứng viên theo MSSV hoặc Họ tên từ sổ gốc
@@ -272,11 +265,6 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
                 ),
               ],
             ),
-          ),
-          IconButton(
-            tooltip: 'Làm mới số liệu HR',
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: _isLoadingStats ? null : reloadAuditData,
           ),
         ],
       ),
