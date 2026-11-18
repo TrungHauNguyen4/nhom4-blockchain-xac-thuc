@@ -6,18 +6,39 @@ import 'package:intl/intl.dart';
 import 'package:path/path.dart' as p;
 import 'package:provider/provider.dart';
 
+import '../../models/certificate_record.dart';
 import '../../models/signing_request_model.dart';
 import '../../providers/auth_provider.dart';
+import '../../services/api_service.dart';
 import '../../services/folder_batch_validator.dart';
 import '../../services/hash_service.dart';
 import '../../services/signing_request_service.dart';
 import '../../utils/verify_navigation_helper.dart';
+import '../verifier/verify_detail_screen.dart';
+
+/// Phân tách danh sách tệp đã băm thành nhóm đã ký sẵn trên Blockchain và nhóm chưa ký cần gửi.
+({List<T> signed, List<T> unsigned}) partitionBySignedStatus<T>(
+  List<T> items,
+  bool Function(T item) isSigned,
+) {
+  final signed = <T>[];
+  final unsigned = <T>[];
+  for (final item in items) {
+    if (isSigned(item)) {
+      signed.add(item);
+    } else {
+      unsigned.add(item);
+    }
+  }
+  return (signed: signed, unsigned: unsigned);
+}
 
 class _PreparedHashedFile {
   final String fileName;
   final String fileType; // 'IMAGE' | 'PDF'
   final int fileSizeBytes;
   final String documentHash;
+  final CertificateRecord? existingRecord;
   final TextEditingController degreeNameController;
 
   _PreparedHashedFile({
@@ -25,8 +46,11 @@ class _PreparedHashedFile {
     required this.fileType,
     required this.fileSizeBytes,
     required this.documentHash,
+    this.existingRecord,
     required String defaultDegreeName,
   }) : degreeNameController = TextEditingController(text: defaultDegreeName);
+
+  bool get isAlreadySigned => existingRecord != null;
 
   void dispose() => degreeNameController.dispose();
 }
@@ -214,6 +238,8 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
     List<({String name, String type, Uint8List bytes})> items,
   ) async {
     setState(() => _isHashing = true);
+    final apiService = Provider.of<ApiService?>(context, listen: false) ??
+        ApiService();
     try {
       final prepared = <_PreparedHashedFile>[];
       for (final item in items) {
@@ -221,6 +247,12 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
         final hash = _selectedAlgorithm == HashAlgorithm.sha256
             ? both.sha256
             : both.keccak256;
+        CertificateRecord? existing;
+        try {
+          existing = await apiService.verifyHash(hash, fileName: item.name);
+        } catch (_) {
+          existing = null;
+        }
         final baseTitle = p.basenameWithoutExtension(item.name).trim();
         prepared.add(
           _PreparedHashedFile(
@@ -228,6 +260,7 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
             fileType: item.type,
             fileSizeBytes: item.bytes.lengthInBytes,
             documentHash: hash,
+            existingRecord: existing,
             defaultDegreeName: baseTitle.isEmpty ? item.name : baseTitle,
           ),
         );
@@ -251,6 +284,17 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
           isError: true);
       return;
     }
+    final partitioned = partitionBySignedStatus(
+      _preparedFiles,
+      (f) => f.isAlreadySigned,
+    );
+    final unsignedFiles = partitioned.unsigned;
+    if (unsignedFiles.isEmpty) {
+      _showSnack(
+        'Tất cả tệp đã được ký xác nhận trước đây, không cần gửi chờ ký.',
+      );
+      return;
+    }
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final user = context.read<AuthProvider>().currentUser;
@@ -272,7 +316,7 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
           requesterEmail: user.email,
           requesterOrganization: user.organization,
           issuerName: issuerName,
-          items: _preparedFiles
+          items: unsignedFiles
               .map(
                 (f) => (
                   degreeName: f.degreeNameController.text.trim().isEmpty
@@ -292,7 +336,7 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
               .toList(growable: false),
         );
       } else {
-        final f = _preparedFiles.first;
+        final f = unsignedFiles.first;
         await _service.submitRequest(
           requesterUid: user.uid,
           requesterName: user.name,
@@ -316,7 +360,7 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
 
       if (!mounted) return;
       _showSnack(
-        'Đã gửi ${_preparedFiles.length} yêu cầu ký. Thời gian xử lý mặc định trong vòng 24 giờ.',
+        'Đã gửi ${unsignedFiles.length} yêu cầu ký mới. Thời gian xử lý mặc định trong vòng 24 giờ.',
       );
       setState(() {
         _clearPreparedFiles();
@@ -469,14 +513,55 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
               const Center(child: CircularProgressIndicator()),
               const SizedBox(height: 8),
               const Center(
-                child: Text('Đang tính mã Hash từ byte tệp gốc...'),
+                child: Text(
+                  'Đang tính mã Hash & kiểm tra văn bằng đã ký...',
+                ),
               ),
             ],
             if (_preparedFiles.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(
-                'Đã chuẩn bị ${_preparedFiles.length} tệp (${_preparedFiles.first.fileType})',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+              Builder(
+                builder: (context) {
+                  final partitioned = partitionBySignedStatus(
+                    _preparedFiles,
+                    (f) => f.isAlreadySigned,
+                  );
+                  final signedCount = partitioned.signed.length;
+                  final unsignedCount = partitioned.unsigned.length;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Đã chuẩn bị ${_preparedFiles.length} tệp (${_preparedFiles.first.fileType})',
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      if (signedCount > 0) ...[
+                        const SizedBox(height: 6),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.teal.withValues(alpha: 0.10),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: Colors.teal.withValues(alpha: 0.4),
+                            ),
+                          ),
+                          child: Text(
+                            unsignedCount == 0
+                                ? 'Tất cả $signedCount tệp đều đã được ký xác nhận trước đây. Bạn có thể bấm Xem kết quả xác thực ngay bên dưới (không cần gửi lại).'
+                                : '$signedCount tệp đã ký trước đây (sẽ tự động bỏ qua) • $unsignedCount tệp mới sẽ được gửi chờ ký.',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.teal,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 8),
               ..._preparedFiles.map((f) => Card(
@@ -514,18 +599,96 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          TextFormField(
-                            controller: f.degreeNameController,
-                            decoration: const InputDecoration(
-                              labelText: 'Tên tài liệu / văn bằng',
-                              border: OutlineInputBorder(),
-                              isDense: true,
+                          if (f.isAlreadySigned) ...[
+                            const SizedBox(height: 8),
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.green.withValues(alpha: 0.10),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(
+                                  color: Colors.green.withValues(alpha: 0.35),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Row(
+                                    children: [
+                                      Icon(
+                                        Icons.verified,
+                                        size: 17,
+                                        color: Colors.green,
+                                      ),
+                                      SizedBox(width: 6),
+                                      Expanded(
+                                        child: Text(
+                                          'Đã được ký xác nhận trước đây',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            color: Colors.green,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if ((f.existingRecord?.degreeName ?? '')
+                                      .isNotEmpty)
+                                    Padding(
+                                      padding: const EdgeInsets.only(top: 4),
+                                      child: Text(
+                                        'Văn bằng: ${f.existingRecord!.degreeName}',
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                    ),
+                                  if ((f.existingRecord?.issuerName ?? '')
+                                      .isNotEmpty)
+                                    Text(
+                                      'Đơn vị cấp: ${f.existingRecord!.issuerName}',
+                                      style: const TextStyle(fontSize: 12),
+                                    ),
+                                  const SizedBox(height: 4),
+                                  Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: TextButton.icon(
+                                      onPressed: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (_) => VerifyDetailScreen(
+                                              record: f.existingRecord,
+                                              searchedHash: f.documentHash,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                      icon: const Icon(
+                                        Icons.open_in_new,
+                                        size: 16,
+                                      ),
+                                      label: const Text(
+                                        'Xem kết quả xác thực',
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                            validator: (v) => (v == null || v.trim().isEmpty)
-                                ? 'Vui lòng nhập tên tài liệu'
-                                : null,
-                          ),
+                          ] else ...[
+                            const SizedBox(height: 8),
+                            TextFormField(
+                              controller: f.degreeNameController,
+                              decoration: const InputDecoration(
+                                labelText: 'Tên tài liệu / văn bằng',
+                                border: OutlineInputBorder(),
+                                isDense: true,
+                              ),
+                              validator: (v) => (v == null || v.trim().isEmpty)
+                                  ? 'Vui lòng nhập tên tài liệu'
+                                  : null,
+                            ),
+                          ],
                           const SizedBox(height: 6),
                           SelectableText(
                             'Hash: ${f.documentHash}',
@@ -584,27 +747,38 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
                   : null,
             ),
             const SizedBox(height: 20),
-            ElevatedButton.icon(
-              onPressed: (_isSubmitting || _isHashing || _preparedFiles.isEmpty)
-                  ? null
-                  : _submitRequests,
-              icon: _isSubmitting
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Icon(Icons.send),
-              label: Text(
-                _isSubmitting
-                    ? 'Đang gửi yêu cầu...'
-                    : 'Gửi yêu cầu ký (${_preparedFiles.length} tệp)',
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.teal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 15),
-              ),
+            Builder(
+              builder: (context) {
+                final pendingCount = _preparedFiles
+                    .where((f) => !f.isAlreadySigned)
+                    .length;
+                final allSigned =
+                    _preparedFiles.isNotEmpty && pendingCount == 0;
+                return ElevatedButton.icon(
+                  onPressed: (_isSubmitting || _isHashing || pendingCount == 0)
+                      ? null
+                      : _submitRequests,
+                  icon: _isSubmitting
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Icon(allSigned ? Icons.verified : Icons.send),
+                  label: Text(
+                    _isSubmitting
+                        ? 'Đang gửi yêu cầu...'
+                        : allSigned
+                            ? 'Tất cả tệp đã được ký trước đây'
+                            : 'Gửi yêu cầu ký ($pendingCount tệp mới)',
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.teal,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 15),
+                  ),
+                );
+              },
             ),
           ],
         ),

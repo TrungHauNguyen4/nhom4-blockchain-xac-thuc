@@ -7,6 +7,7 @@ import 'package:nhom4_lap_trinh_mobile/providers/auth_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/providers/theme_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/signing_requests_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/notifications/notifications_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/requests/submit_signing_request_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/folder_batch_validator.dart';
 
@@ -104,5 +105,21 @@ void main() {
     await tester.pumpWidget(wrap(const NotificationsScreen()));
     await tester.pumpAndSettle();
     expect(find.text('Thông Báo'), findsOneWidget);
+  });
+
+  test('partitionBySignedStatus tách đúng tệp đã ký và tệp mới trong lô HR', () {
+    final batch = [
+      (name: 'da_ky_1.pdf', signed: true),
+      (name: 'chua_ky_1.pdf', signed: false),
+      (name: 'da_ky_2.pdf', signed: true),
+      (name: 'chua_ky_2.pdf', signed: false),
+    ];
+
+    final result = partitionBySignedStatus(batch, (item) => item.signed);
+    expect(result.signed.map((e) => e.name), ['da_ky_1.pdf', 'da_ky_2.pdf']);
+    expect(
+      result.unsigned.map((e) => e.name),
+      ['chua_ky_1.pdf', 'chua_ky_2.pdf'],
+    );
   });
 }
