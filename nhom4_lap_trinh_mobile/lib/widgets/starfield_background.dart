@@ -15,6 +15,7 @@ class StarfieldBackground extends StatefulWidget {
   final double brightness;
   final Color glowColor;
   final double glowOpacity;
+  final bool enableShootingStars;
   final Widget? child;
 
   const StarfieldBackground({
@@ -24,6 +25,7 @@ class StarfieldBackground extends StatefulWidget {
     this.brightness = 1.0,
     this.glowColor = const Color(0xFF6B1822),
     this.glowOpacity = 0.20,
+    this.enableShootingStars = true,
     this.child,
   });
 
@@ -129,6 +131,7 @@ class _StarfieldBackgroundState extends State<StarfieldBackground>
                     elapsedSeconds: _elapsedSeconds,
                     driftSpeedMultiplier: widget.driftSpeed,
                     brightness: widget.brightness.clamp(0.0, 1.0),
+                    enableShootingStars: widget.enableShootingStars,
                   ),
                   size: Size.infinite,
                 ),
@@ -167,16 +170,22 @@ class _StarParticle {
 }
 
 class _StarfieldPainter extends CustomPainter {
+  static const double _shootingCycleSec = 5.2;
+  static const double _shootingActiveSec = 1.15;
+  static const double _bloomPhaseSec = 0.38;
+
   final List<_StarParticle> stars;
   final double elapsedSeconds;
   final double driftSpeedMultiplier;
   final double brightness;
+  final bool enableShootingStars;
 
   const _StarfieldPainter({
     required this.stars,
     required this.elapsedSeconds,
     required this.driftSpeedMultiplier,
     required this.brightness,
+    required this.enableShootingStars,
   });
 
   @override
@@ -219,6 +228,76 @@ class _StarfieldPainter extends CustomPainter {
       paint.color = star.color.withValues(alpha: opacity.clamp(0.0, 1.0));
       canvas.drawCircle(Offset(x, y), star.radius, paint);
     }
+
+    if (enableShootingStars) {
+      _paintShootingStar(canvas, size);
+    }
+  }
+
+  void _paintShootingStar(Canvas canvas, Size size) {
+    final cycleIndex = (elapsedSeconds / _shootingCycleSec).floor();
+    final localT = elapsedSeconds - cycleIndex * _shootingCycleSec;
+    if (localT < 0 || localT > _shootingActiveSec) return;
+
+    final rng = math.Random(cycleIndex * 9973 + 31);
+    final origin = Offset(
+      (0.12 + rng.nextDouble() * 0.76) * size.width,
+      (0.08 + rng.nextDouble() * 0.55) * size.height,
+    );
+    final angle = rng.nextDouble() * math.pi * 2.0;
+    final travelDist = 150.0 + rng.nextDouble() * 110.0;
+    final dir = Offset(math.cos(angle), math.sin(angle));
+
+    if (localT <= _bloomPhaseSec) {
+      // Pha 1: Đốm sáng lơ lửng nở rộng và bừng sáng
+      final t = Curves.easeOut.transform((localT / _bloomPhaseSec).clamp(0.0, 1.0));
+      final radius = (1.1 + t * 3.1);
+      final alpha = (0.15 + t * 0.80) * brightness;
+
+      final bloomGlow = Paint()
+        ..color = const Color(0xFFDCEBFF).withValues(alpha: (alpha * 0.6).clamp(0.0, 1.0))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4.0 + t * 6.0);
+      canvas.drawCircle(origin, radius * 2.1, bloomGlow);
+
+      final core = Paint()
+        ..color = Colors.white.withValues(alpha: alpha.clamp(0.0, 1.0));
+      canvas.drawCircle(origin, radius, core);
+      return;
+    }
+
+    // Pha 2: Phóng theo hướng ngẫu nhiên với đuôi sáng mờ dần
+    final rawStreakT =
+        ((localT - _bloomPhaseSec) / (_shootingActiveSec - _bloomPhaseSec))
+            .clamp(0.0, 1.0);
+    final moveT = Curves.easeOutCubic.transform(rawStreakT);
+    final fadeAlpha = (1.0 - Curves.easeIn.transform(rawStreakT)) * brightness;
+
+    final head = origin + dir * (travelDist * moveT);
+    final tailLength = 68.0 * (1.0 - rawStreakT * 0.45);
+    final tail = head - dir * tailLength;
+
+    final streakPaint = Paint()
+      ..strokeWidth = 2.2 * (1.0 - rawStreakT * 0.4)
+      ..strokeCap = StrokeCap.round
+      ..shader = LinearGradient(
+        colors: [
+          Colors.white.withValues(alpha: fadeAlpha.clamp(0.0, 1.0)),
+          const Color(0xFFDCEBFF).withValues(alpha: (fadeAlpha * 0.45).clamp(0.0, 1.0)),
+          Colors.transparent,
+        ],
+        stops: const [0.0, 0.35, 1.0],
+      ).createShader(Rect.fromPoints(head, tail));
+
+    canvas.drawLine(head, tail, streakPaint);
+
+    final headGlow = Paint()
+      ..color = Colors.white.withValues(alpha: (fadeAlpha * 0.7).clamp(0.0, 1.0))
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.5);
+    canvas.drawCircle(head, 3.2, headGlow);
+
+    final headCore = Paint()
+      ..color = Colors.white.withValues(alpha: fadeAlpha.clamp(0.0, 1.0));
+    canvas.drawCircle(head, 1.8, headCore);
   }
 
   @override
@@ -226,6 +305,7 @@ class _StarfieldPainter extends CustomPainter {
     return oldDelegate.elapsedSeconds != elapsedSeconds ||
         oldDelegate.brightness != brightness ||
         oldDelegate.driftSpeedMultiplier != driftSpeedMultiplier ||
+        oldDelegate.enableShootingStars != enableShootingStars ||
         oldDelegate.stars != stars;
   }
 }

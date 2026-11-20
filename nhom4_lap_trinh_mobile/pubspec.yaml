@@ -2,7 +2,7 @@ name: nhom4_lap_trinh_mobile
 description: "Ung dung xac thuc van bang chung chi so Blockchain"
 publish_to: 'none'
 
-version: 1.0.4+5
+version: 1.0.5+6
 
 environment:
   sdk: ^3.12.1

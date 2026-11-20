@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/api_service.dart';
 import '../../services/db_service.dart';
 import '../../services/hr_review_service.dart';
+import '../../widgets/glass_widgets.dart';
 import '../../widgets/pagination_controls.dart';
 import '../requests/submit_signing_request_screen.dart';
 import '../verifier/verify_detail_screen.dart';
@@ -365,11 +366,7 @@ class EmployerAuditTabState extends State<EmployerAuditTab> {
       ),
       child: Row(
         children: [
-          CircleAvatar(
-            radius: 17,
-            backgroundColor: data.color.withValues(alpha: 0.15),
-            child: Icon(data.icon, color: data.color, size: 18),
-          ),
+          ThemedIconBadge(icon: data.icon, color: data.color, size: 18),
           const SizedBox(width: 10),
           Expanded(
             child: Column(

@@ -43,8 +43,12 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeProvider = Provider.of<ThemeProvider?>(context);
+    final cardStyle = themeProvider?.cardStyle ?? AppCardStyle.current;
+    final accent = themeProvider?.accentColor ?? Theme.of(context).colorScheme.primary;
     final count = widget.items.isEmpty ? 1 : widget.items.length;
     final safeSelected = widget.selectedIndex.clamp(0, count - 1);
+    final outerRadius = cardStyle == AppCardStyle.current ? 999.0 : 20.0;
 
     return RepaintBoundary(
       child: SafeArea(
@@ -52,7 +56,7 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 4, 14, 12),
           child: ClipRRect(
-            borderRadius: BorderRadius.circular(999),
+            borderRadius: BorderRadius.circular(outerRadius),
             child: BackdropFilter(
               filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
               child: Container(
@@ -60,14 +64,16 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                 padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: isDark
-                      ? const Color(0xFF18181A).withValues(alpha: 0.90)
+                      ? const Color(0xFF121824).withValues(alpha: 0.88)
                       : const Color(0xFFF7F6F2).withValues(alpha: 0.92),
-                  borderRadius: BorderRadius.circular(999),
+                  borderRadius: BorderRadius.circular(outerRadius),
                   border: Border.all(
-                    color: isDark
-                        ? Colors.white.withValues(alpha: 0.14)
-                        : const Color(0xFFD6D4CC),
-                    width: 1.1,
+                    color: cardStyle == AppCardStyle.card
+                        ? accent.withValues(alpha: 0.35)
+                        : (isDark
+                            ? Colors.white.withValues(alpha: 0.14)
+                            : const Color(0xFFD6D4CC)),
+                    width: cardStyle == AppCardStyle.minimal ? 0.8 : 1.1,
                   ),
                   boxShadow: [
                     BoxShadow(
@@ -85,51 +91,86 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
 
                     return Stack(
                       children: [
-                        // Lớp 1: Viên thuốc trượt ngang liên tục (Sliding Pill Indicator)
-                        AnimatedPositioned(
-                          duration: const Duration(milliseconds: 320),
-                          curve: Curves.easeOutCubic,
-                          left: pillLeft + 2,
-                          top: 0,
-                          bottom: 0,
-                          width: (tabWidth - 4).clamp(0.0, constraints.maxWidth),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              gradient: isDark
-                                  ? const LinearGradient(
-                                      colors: [
-                                        Color(0xFFECEBE6),
-                                        Color(0xFFDAD8D0),
-                                      ],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
+                        // Lớp 1: Indicator theo Chủ đề biểu tượng (Hiện tại / Tối giản / Dạng thẻ)
+                        if (cardStyle == AppCardStyle.current)
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 320),
+                            curve: Curves.easeOutCubic,
+                            left: pillLeft + 2,
+                            top: 0,
+                            bottom: 0,
+                            width: (tabWidth - 4).clamp(0.0, constraints.maxWidth),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                gradient: isDark
+                                    ? const LinearGradient(
+                                        colors: [
+                                          Color(0xFFECEBE6),
+                                          Color(0xFFDAD8D0),
+                                        ],
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                      )
+                                    : LinearGradient(
+                                        colors: [
+                                          accent,
+                                          accent.withValues(alpha: 0.82),
+                                        ],
+                                        begin: Alignment.topCenter,
+                                        end: Alignment.bottomCenter,
+                                      ),
+                                borderRadius: BorderRadius.circular(999),
+                                boxShadow: [
+                                  if (isDark)
+                                    BoxShadow(
+                                      color: Colors.white.withValues(alpha: 0.34),
+                                      blurRadius: 16,
+                                      spreadRadius: 0.5,
                                     )
-                                  : const LinearGradient(
-                                      colors: [
-                                        Color(0xFF565C43),
-                                        Color(0xFF3E4230),
-                                      ],
-                                      begin: Alignment.topCenter,
-                                      end: Alignment.bottomCenter,
+                                  else
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.24),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 3),
                                     ),
-                              borderRadius: BorderRadius.circular(999),
-                              boxShadow: [
-                                if (isDark)
-                                  BoxShadow(
-                                    color: Colors.white.withValues(alpha: 0.34),
-                                    blurRadius: 16,
-                                    spreadRadius: 0.5,
-                                  )
-                                else
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.24),
-                                    blurRadius: 12,
-                                    offset: const Offset(0, 3),
-                                  ),
-                              ],
+                                ],
+                              ),
+                            ),
+                          )
+                        else if (cardStyle == AppCardStyle.card)
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 280),
+                            curve: Curves.easeOutCubic,
+                            left: pillLeft + 3,
+                            top: 1,
+                            bottom: 1,
+                            width: (tabWidth - 6).clamp(0.0, constraints.maxWidth),
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: accent.withValues(alpha: 0.20),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(
+                                  color: accent.withValues(alpha: 0.80),
+                                  width: 1.2,
+                                ),
+                              ),
+                            ),
+                          )
+                        else
+                          AnimatedPositioned(
+                            duration: const Duration(milliseconds: 260),
+                            curve: Curves.easeOutCubic,
+                            left: pillLeft + (tabWidth - 22) / 2,
+                            bottom: 2,
+                            width: 22,
+                            height: 3,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: accent,
+                                borderRadius: BorderRadius.circular(99),
+                              ),
                             ),
                           ),
-                        ),
 
                         // Lớp 2: Danh sách các nút Tab với hiệu ứng phóng/thu đàn hồi
                         Row(
@@ -138,9 +179,14 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                             final isSelected = index == safeSelected;
                             final isPressed = _pressedIndex == index;
 
-                            final Color activeTextColor = isDark
-                                ? const Color(0xFF141416)
-                                : const Color(0xFFECEBE6);
+                            final Color activeTextColor;
+                            if (cardStyle == AppCardStyle.current) {
+                              activeTextColor = isDark
+                                  ? const Color(0xFF141416)
+                                  : const Color(0xFFECEBE6);
+                            } else {
+                              activeTextColor = accent;
+                            }
                             final Color inactiveTextColor = isDark
                                 ? const Color(0xFFECEBE6).withValues(alpha: 0.68)
                                 : const Color(0xFF5C5B57);
@@ -189,9 +235,12 @@ class _GlassyBottomNavBarState extends State<GlassyBottomNavBar> {
                                                 MainAxisAlignment.center,
                                             children: [
                                               Icon(
-                                                isSelected
-                                                    ? item.selectedIcon
-                                                    : item.icon,
+                                                (cardStyle ==
+                                                            AppCardStyle
+                                                                .minimal ||
+                                                        !isSelected)
+                                                    ? item.icon
+                                                    : item.selectedIcon,
                                                 size: 18,
                                                 color: resolvedColor,
                                               ),
@@ -328,16 +377,37 @@ class _GlassCardState extends State<GlassCard> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final themeProvider = Provider.of<ThemeProvider?>(context);
+    final cardStyle = themeProvider?.cardStyle ?? AppCardStyle.current;
+    final accent =
+        themeProvider?.accentColor ?? Theme.of(context).colorScheme.primary;
     final useStarCard = isDark && (themeProvider?.starfieldEnabled ?? true);
     final defaultBg = isDark
         ? (useStarCard
             ? const Color.fromRGBO(22, 30, 42, 0.72)
             : const Color(0xFF18181A).withValues(alpha: 0.92))
         : const Color(0xFFF7F6F2).withValues(alpha: 0.94);
-    final defaultBorder = isDark
-        ? Colors.white.withValues(alpha: useStarCard ? 0.08 : 0.10)
-        : const Color(0xFFD6D4CC);
-    final radius = useStarCard ? 16.0 : 22.0;
+
+    final Color defaultBorder;
+    if (cardStyle == AppCardStyle.card) {
+      defaultBorder = accent.withValues(alpha: 0.38);
+    } else if (cardStyle == AppCardStyle.minimal) {
+      defaultBorder = isDark
+          ? Colors.white.withValues(alpha: 0.04)
+          : const Color(0xFFD6D4CC).withValues(alpha: 0.45);
+    } else {
+      defaultBorder = isDark
+          ? Colors.white.withValues(alpha: useStarCard ? 0.08 : 0.10)
+          : const Color(0xFFD6D4CC);
+    }
+
+    final double radius;
+    if (cardStyle == AppCardStyle.minimal) {
+      radius = 12.0;
+    } else if (cardStyle == AppCardStyle.card) {
+      radius = 18.0;
+    } else {
+      radius = useStarCard ? 16.0 : 22.0;
+    }
 
     return AnimatedScale(
       scale: _isPressed ? 0.975 : 1.0,
@@ -418,6 +488,52 @@ class GlassScaffoldBackground extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+/// Biểu tượng thích ứng theo Chủ đề biểu tượng (`Hiện tại` / `Tối giản` / `Dạng thẻ`).
+class ThemedIconBadge extends StatelessWidget {
+  final IconData icon;
+  final Color? color;
+  final double size;
+
+  const ThemedIconBadge({
+    super.key,
+    required this.icon,
+    this.color,
+    this.size = 18,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = Provider.of<ThemeProvider?>(context);
+    final style = themeProvider?.cardStyle ?? AppCardStyle.current;
+    final resolvedColor = color ?? Theme.of(context).colorScheme.primary;
+
+    if (style == AppCardStyle.minimal) {
+      return Icon(icon, color: resolvedColor, size: size + 2);
+    }
+
+    if (style == AppCardStyle.card) {
+      return Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: resolvedColor.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: resolvedColor.withValues(alpha: 0.45),
+            width: 1.1,
+          ),
+        ),
+        child: Icon(icon, color: resolvedColor, size: size),
+      );
+    }
+
+    return CircleAvatar(
+      radius: (size / 2) + 8,
+      backgroundColor: resolvedColor.withValues(alpha: 0.15),
+      child: Icon(icon, color: resolvedColor, size: size),
     );
   }
 }
