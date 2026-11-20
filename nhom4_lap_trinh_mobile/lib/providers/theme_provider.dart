@@ -159,11 +159,16 @@ class ThemeProvider extends ChangeNotifier {
       case AppCardStyle.minimal:
         return 12;
       case AppCardStyle.card:
-        return 16;
+        return 18;
     }
   }
 
   ThemeData buildLightTheme() {
+    final borderColor = _cardStyle == AppCardStyle.card
+        ? _accentColor.withValues(alpha: 0.35)
+        : (_cardStyle == AppCardStyle.minimal
+            ? const Color(0xFFD6D4CC).withValues(alpha: 0.45)
+            : const Color(0xFFD6D4CC));
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
@@ -189,10 +194,8 @@ class ThemeProvider extends ChangeNotifier {
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(_cardBorderRadius),
           side: BorderSide(
-            color: _cardStyle == AppCardStyle.minimal
-                ? const Color(0xFFD6D4CC).withValues(alpha: 0.5)
-                : const Color(0xFFD6D4CC),
-            width: 1.1,
+            color: borderColor,
+            width: _cardStyle == AppCardStyle.card ? 1.3 : 1.0,
           ),
         ),
       ),
@@ -204,10 +207,23 @@ class ThemeProvider extends ChangeNotifier {
     final cardColor = useStarCard
         ? const Color.fromRGBO(22, 30, 42, 0.72)
         : const Color(0xFF18181A);
-    final cardBorderColor = useStarCard
-        ? Colors.white.withValues(alpha: 0.08)
-        : const Color(0xFF2C2C30);
-    final radius = useStarCard ? 16.0 : _cardBorderRadius;
+    final Color cardBorderColor;
+    switch (_cardStyle) {
+      case AppCardStyle.current:
+        cardBorderColor = useStarCard
+            ? Colors.white.withValues(alpha: 0.08)
+            : const Color(0xFF2C2C30);
+        break;
+      case AppCardStyle.minimal:
+        cardBorderColor = Colors.white.withValues(alpha: 0.04);
+        break;
+      case AppCardStyle.card:
+        cardBorderColor = _accentColor.withValues(alpha: 0.38);
+        break;
+    }
+    final radius = (_cardStyle == AppCardStyle.current && useStarCard)
+        ? 16.0
+        : _cardBorderRadius;
 
     return ThemeData(
       useMaterial3: true,
