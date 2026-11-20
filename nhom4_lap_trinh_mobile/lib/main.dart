@@ -58,8 +58,8 @@ class CertificateVerifierApp extends StatelessWidget {
         return MaterialApp(
           title: 'Xác Thực Văn Bằng Blockchain',
           debugShowCheckedModeBanner: false,
-          theme: ThemeProvider.lightTheme,
-          darkTheme: ThemeProvider.darkTheme,
+          theme: themeProvider.buildLightTheme(),
+          darkTheme: themeProvider.buildDarkTheme(),
           themeMode: themeProvider.themeMode,
           // Cổng kiểm tra phiên đăng nhập tự động (AuthGate) theo chuẩn Chương 11
           home: const AuthGate(),
