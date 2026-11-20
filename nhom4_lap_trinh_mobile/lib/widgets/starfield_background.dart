@@ -196,14 +196,13 @@ class _StarfieldPainter extends CustomPainter {
     final glowPaint = Paint()..style = PaintingStyle.fill;
 
     for (final star in stars) {
-      // 1. Chuyển động trôi chậm lên trên & vòng lặp vô tận với X ngẫu nhiên mới
+      // 1. Chuyển động trôi chậm từ trên xuống dưới & vòng lặp vô tận với X ngẫu nhiên mới
       final totalDrift =
           star.driftPxPerSec * driftSpeedMultiplier * elapsedSeconds;
       final initialY = star.seedY * size.height;
-      final rawY = initialY - totalDrift;
-      final wrapCount = (rawY < 0) ? ((-rawY / size.height).floor() + 1) : 0;
-      double y = rawY % size.height;
-      if (y < 0) y += size.height;
+      final rawY = initialY + totalDrift;
+      final wrapCount = (rawY / size.height).floor();
+      final y = rawY % size.height;
 
       // Golden-ratio hash theo số lần wrap để vị trí X ngẫu nhiên khi xuất hiện lại ở đáy
       final normX = (star.seedX + wrapCount * 0.61803398875) % 1.0;
@@ -241,10 +240,11 @@ class _StarfieldPainter extends CustomPainter {
 
     final rng = math.Random(cycleIndex * 9973 + 31);
     final origin = Offset(
-      (0.12 + rng.nextDouble() * 0.76) * size.width,
-      (0.08 + rng.nextDouble() * 0.55) * size.height,
+      (0.25 + rng.nextDouble() * 0.67) * size.width,
+      (0.06 + rng.nextDouble() * 0.46) * size.height,
     );
-    final angle = rng.nextDouble() * math.pi * 2.0;
+    // Hướng từ trên-phải xuống dưới-trái (~125° - 155°, tức cos < 0, sin > 0)
+    final angle = 2.18 + rng.nextDouble() * 0.52;
     final travelDist = 150.0 + rng.nextDouble() * 110.0;
     final dir = Offset(math.cos(angle), math.sin(angle));
 
