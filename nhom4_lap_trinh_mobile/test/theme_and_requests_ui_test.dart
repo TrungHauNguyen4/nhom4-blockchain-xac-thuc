@@ -8,6 +8,7 @@ import 'package:nhom4_lap_trinh_mobile/providers/theme_provider.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/requests/submit_signing_request_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/settings/theme_customization_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
+import 'package:nhom4_lap_trinh_mobile/widgets/glass_widgets.dart';
 import 'package:nhom4_lap_trinh_mobile/widgets/starfield_background.dart';
 
 void main() {
@@ -37,9 +38,57 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 120));
+    await tester.pump(const Duration(milliseconds: 500));
     await tester.tap(find.text('Bấm thử'));
     expect(tapped, isTrue);
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'GlassyBottomNavBar, GlassCard & ThemedIconBadge đổi style theo 3 AppCardStyle',
+      (WidgetTester tester) async {
+    final tp = ThemeProvider();
+    for (final style in AppCardStyle.values) {
+      await tp.setCardStyle(style);
+      await tester.pumpWidget(
+        ChangeNotifierProvider<ThemeProvider>.value(
+          value: tp,
+          child: MaterialApp(
+            theme: tp.buildDarkTheme(),
+            home: Scaffold(
+              body: const GlassCard(
+                child: Row(
+                  children: [
+                    ThemedIconBadge(icon: Icons.verified),
+                    SizedBox(width: 8),
+                    Text('Kiểm tra style'),
+                  ],
+                ),
+              ),
+              bottomNavigationBar: GlassyBottomNavBar(
+                selectedIndex: 0,
+                onDestinationSelected: (_) {},
+                items: const [
+                  GlassNavItem(
+                    icon: Icons.verified_outlined,
+                    selectedIcon: Icons.verified,
+                    label: 'Xác thực',
+                  ),
+                  GlassNavItem(
+                    icon: Icons.settings_outlined,
+                    selectedIcon: Icons.settings,
+                    label: 'Cài đặt',
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('Kiểm tra style'), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
   });
 
   testWidgets('ThemeCustomizationScreen chuyển Sáng/Tối/Hệ thống, Trời sao, Kiểu thẻ & Màu',

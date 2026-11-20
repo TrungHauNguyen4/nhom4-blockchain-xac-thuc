@@ -6,6 +6,7 @@ import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/api_service.dart';
+import '../../widgets/glass_widgets.dart';
 import '../auth/profile_screen.dart';
 import 'theme_customization_screen.dart';
 
@@ -277,8 +278,8 @@ class _SettingsTabState extends State<SettingsTab> {
           child: Column(
             children: [
               ListTile(
-                leading: Icon(
-                  Icons.palette_outlined,
+                leading: ThemedIconBadge(
+                  icon: Icons.palette_outlined,
                   color: theme.colorScheme.primary,
                 ),
                 title: const Text(
@@ -287,7 +288,8 @@ class _SettingsTabState extends State<SettingsTab> {
                 ),
                 subtitle: Text(
                   '${themeProvider.themeMode == ThemeMode.light ? 'Sáng' : (themeProvider.themeMode == ThemeMode.system ? 'Hệ thống' : 'Tối')}'
-                  '${themeProvider.starfieldEnabled ? ' • Nền vũ trụ Bật' : ''}',
+                  '${themeProvider.starfieldEnabled ? ' • Nền vũ trụ Bật' : ''}'
+                  ' • ${themeProvider.cardStyle.labelVi}',
                 ),
                 trailing: const Icon(Icons.chevron_right),
                 onTap: () {
@@ -301,8 +303,10 @@ class _SettingsTabState extends State<SettingsTab> {
               ),
               const Divider(height: 1),
               SwitchListTile(
-                secondary: Icon(
-                  themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                secondary: ThemedIconBadge(
+                  icon: themeProvider.isDarkMode
+                      ? Icons.dark_mode
+                      : Icons.light_mode,
                   color: theme.colorScheme.primary,
                 ),
                 title: const Text(
