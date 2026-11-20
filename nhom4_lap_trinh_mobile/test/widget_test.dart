@@ -399,23 +399,23 @@ void main() {
 
     // Kiểm tra cả 4 Tab trên HomeScreen ở chế độ dọc hẹp
     await tester.pumpWidget(wrapWithProviders(const HomeScreen()));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
 
     for (final tabLabel in ['Sổ tay & Lịch sử', 'Cấp bằng', 'Cài đặt']) {
       await tester.tap(find.text(tabLabel));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(tester.takeException(), isNull);
     }
 
     // Xoay ngang màn hình hẹp (780x340 logical px) kiểm tra 2 cột trên mọi Tab & IssuedListScreen
     tester.view.physicalSize = const Size(780, 340);
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 500));
     expect(tester.takeException(), isNull);
 
     for (final tabLabel in ['Xác thực', 'Sổ tay & Lịch sử', 'Cấp bằng']) {
       await tester.tap(find.text(tabLabel));
-      await tester.pumpAndSettle();
+      await tester.pump(const Duration(milliseconds: 500));
       expect(tester.takeException(), isNull);
     }
 
