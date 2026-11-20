@@ -1,5 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+
+import '../providers/theme_provider.dart';
+import 'starfield_background.dart';
 
 class GlassNavItem {
   final IconData icon;
@@ -323,12 +327,17 @@ class _GlassCardState extends State<GlassCard> {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeProvider = Provider.of<ThemeProvider?>(context);
+    final useStarCard = isDark && (themeProvider?.starfieldEnabled ?? true);
     final defaultBg = isDark
-        ? const Color(0xFF18181A).withValues(alpha: 0.92)
+        ? (useStarCard
+            ? const Color.fromRGBO(22, 30, 42, 0.72)
+            : const Color(0xFF18181A).withValues(alpha: 0.92))
         : const Color(0xFFF7F6F2).withValues(alpha: 0.94);
     final defaultBorder = isDark
-        ? Colors.white.withValues(alpha: 0.10)
+        ? Colors.white.withValues(alpha: useStarCard ? 0.08 : 0.10)
         : const Color(0xFFD6D4CC);
+    final radius = useStarCard ? 16.0 : 22.0;
 
     return AnimatedScale(
       scale: _isPressed ? 0.975 : 1.0,
@@ -338,10 +347,10 @@ class _GlassCardState extends State<GlassCard> {
         margin: widget.margin,
         decoration: BoxDecoration(
           color: widget.tintColor ?? defaultBg,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(
             color: widget.borderColor ?? defaultBorder,
-            width: 1.2,
+            width: useStarCard ? 1.0 : 1.2,
           ),
           boxShadow: [
             BoxShadow(
@@ -353,7 +362,7 @@ class _GlassCardState extends State<GlassCard> {
         ),
         child: Material(
           color: Colors.transparent,
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(radius),
           clipBehavior: Clip.antiAlias,
           child: widget.onTap != null
               ? InkWell(
@@ -379,6 +388,14 @@ class GlassScaffoldBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final themeProvider = Provider.of<ThemeProvider?>(context);
+    final showStarfield = isDark && (themeProvider?.starfieldEnabled ?? true);
+
+    if (showStarfield) {
+      return StarfieldBackground(
+        child: child,
+      );
+    }
 
     return AnimatedContainer(
       duration: const Duration(milliseconds: 300),

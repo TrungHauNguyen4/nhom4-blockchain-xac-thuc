@@ -394,6 +394,10 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
         title: const Text('Yêu Cầu Ký Tài Liệu'),
         bottom: TabBar(
           controller: _tabController,
+          labelColor: Colors.white,
+          unselectedLabelColor: Colors.white60,
+          indicatorColor: Colors.tealAccent,
+          indicatorWeight: 3,
           tabs: const [
             Tab(icon: Icon(Icons.upload_file), text: 'Gửi yêu cầu mới'),
             Tab(icon: Icon(Icons.history_edu), text: 'Yêu cầu đã gửi'),
@@ -403,8 +407,14 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          _buildSubmitTab(isEmployer: isEmployer),
-          _buildMyRequestsTab(uid: user?.uid ?? ''),
+          _KeepAliveTabWrapper(
+            child: _buildSubmitTab(isEmployer: isEmployer),
+          ),
+          _MyRequestsTabView(
+            uid: user?.uid ?? '',
+            service: _service,
+            onCopyHash: () => _showSnack('Đã sao chép mã Hash.'),
+          ),
         ],
       ),
     );
@@ -785,15 +795,109 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
       ),
     );
   }
+}
 
-  Widget _buildMyRequestsTab({required String uid}) {
-    if (uid.isEmpty) {
+class _KeepAliveTabWrapper extends StatefulWidget {
+  final Widget child;
+
+  const _KeepAliveTabWrapper({required this.child});
+
+  @override
+  State<_KeepAliveTabWrapper> createState() => _KeepAliveTabWrapperState();
+}
+
+class _KeepAliveTabWrapperState extends State<_KeepAliveTabWrapper>
+    with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    return widget.child;
+  }
+}
+
+class _MyRequestsTabView extends StatefulWidget {
+  final String uid;
+  final SigningRequestService service;
+  final VoidCallback onCopyHash;
+
+  const _MyRequestsTabView({
+    required this.uid,
+    required this.service,
+    required this.onCopyHash,
+  });
+
+  @override
+  State<_MyRequestsTabView> createState() => _MyRequestsTabViewState();
+}
+
+class _MyRequestsTabViewState extends State<_MyRequestsTabView>
+    with AutomaticKeepAliveClientMixin {
+  Stream<List<SigningRequestModel>>? _stream;
+
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initStream();
+  }
+
+  @override
+  void didUpdateWidget(covariant _MyRequestsTabView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.uid != widget.uid) {
+      _initStream();
+    }
+  }
+
+  void _initStream() {
+    _stream = widget.uid.isEmpty
+        ? null
+        : widget.service.streamMyRequests(widget.uid);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+    if (widget.uid.isEmpty || _stream == null) {
       return const Center(child: Text('Vui lòng đăng nhập để xem yêu cầu.'));
     }
 
     return StreamBuilder<List<SigningRequestModel>>(
-      stream: _service.streamMyRequests(uid),
+      stream: _stream,
       builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.error_outline,
+                    color: Colors.redAccent,
+                    size: 40,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Không thể tải danh sách yêu cầu: ${snapshot.error}',
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  ElevatedButton.icon(
+                    onPressed: () => setState(_initStream),
+                    icon: const Icon(Icons.refresh, size: 18),
+                    label: const Text('Thử lại'),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }
         if (snapshot.connectionState == ConnectionState.waiting &&
             !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -916,7 +1020,7 @@ class _SubmitSigningRequestScreenState extends State<SubmitSigningRequestScreen>
                             Clipboard.setData(
                               ClipboardData(text: item.documentHash),
                             );
-                            _showSnack('Đã sao chép mã Hash.');
+                            widget.onCopyHash();
                           },
                         ),
                         if (item.status == SigningRequestStatus.signed)

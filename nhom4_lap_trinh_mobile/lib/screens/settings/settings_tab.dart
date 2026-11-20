@@ -7,6 +7,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/api_service.dart';
 import '../auth/profile_screen.dart';
+import 'theme_customization_screen.dart';
 
 /// Tab Cài Đặt, Cấu Hình IP Backend & Dark Mode (Thành viên 2 phụ trách)
 /// Tích hợp SharedPreferences lưu cấu hình bền vững theo chuẩn Chương 9 & 12
@@ -271,18 +272,48 @@ class _SettingsTabState extends State<SettingsTab> {
           ),
         const SizedBox(height: 14),
 
-        // 2. CÀI ĐẶT GIAO DIỆN DARK MODE
+        // 2. CÀI ĐẶT GIAO DIỆN & NỀN VŨ TRỤ
         Card(
-          child: SwitchListTile(
-            secondary: Icon(
-              themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
-              color: theme.colorScheme.primary,
-            ),
-            title: const Text('Giao diện Tối',
-                style: TextStyle(fontWeight: FontWeight.bold)),
-            subtitle: const Text('Dịu mắt hơn khi sử dụng vào ban đêm'),
-            value: themeProvider.isDarkMode,
-            onChanged: (val) => themeProvider.toggleTheme(val),
+          child: Column(
+            children: [
+              ListTile(
+                leading: Icon(
+                  Icons.palette_outlined,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text(
+                  'Thiết lập giao diện',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: Text(
+                  '${themeProvider.themeMode == ThemeMode.light ? 'Sáng' : (themeProvider.themeMode == ThemeMode.system ? 'Hệ thống' : 'Tối')}'
+                  '${themeProvider.starfieldEnabled ? ' • Nền vũ trụ Bật' : ''}',
+                ),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ThemeCustomizationScreen(),
+                    ),
+                  );
+                },
+              ),
+              const Divider(height: 1),
+              SwitchListTile(
+                secondary: Icon(
+                  themeProvider.isDarkMode ? Icons.dark_mode : Icons.light_mode,
+                  color: theme.colorScheme.primary,
+                ),
+                title: const Text(
+                  'Giao diện Tối',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+                subtitle: const Text('Dịu mắt hơn khi sử dụng vào ban đêm'),
+                value: themeProvider.isDarkMode,
+                onChanged: (val) => themeProvider.toggleTheme(val),
+              ),
+            ],
           ),
         ),
         const SizedBox(height: 14),
