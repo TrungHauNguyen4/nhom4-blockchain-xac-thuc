@@ -194,251 +194,227 @@ class VaultTabState extends State<VaultTab> {
     return DefaultTabController(
       key: ValueKey<String>('vault_tabs_${isStudent ? 3 : 2}'),
       length: isStudent ? 3 : 2,
-      child: Column(
-        children: [
-        // Thanh tìm kiếm & TabBar con phong cách Glassy Pill V7
-        Container(
-          padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
-          child: Column(
-            children: [
-              Row(
+      child: NestedScrollView(
+        headerSliverBuilder: (context, innerBoxIsScrolled) => [
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 6),
+              child: Column(
                 children: [
-                  Expanded(
-                    child: TextField(
-                      controller: _searchController,
-                      onChanged: (_) => setState(() {}),
-                      onSubmitted: (_) => reloadData(),
-                      decoration: InputDecoration(
-                        hintText: 'Tìm theo Tên SV, MSSV, Văn bằng...',
-                        prefixIcon: const Icon(Icons.search, size: 20),
-                        filled: true,
-                        fillColor: isDark
-                            ? const Color(0xFF222536).withValues(alpha: 0.85)
-                            : Colors.white.withValues(alpha: 0.90),
-                        isDense: true,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12,
-                          vertical: 10,
-                        ),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          borderSide: BorderSide(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.14)
-                                : const Color(0xFFDCE4F0),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _searchController,
+                          onChanged: (_) => setState(() {}),
+                          onSubmitted: (_) => reloadData(),
+                          decoration: InputDecoration(
+                            hintText: 'Tìm theo Tên SV, MSSV, Văn bằng...',
+                            prefixIcon: const Icon(Icons.search, size: 20),
+                            filled: true,
+                            fillColor: isDark
+                                ? const Color(0xFF222536).withValues(alpha: 0.85)
+                                : Colors.white.withValues(alpha: 0.90),
+                            isDense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 10,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.14)
+                                    : const Color(0xFFDCE4F0),
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(18),
+                              borderSide: BorderSide(
+                                color: isDark
+                                    ? Colors.white.withValues(alpha: 0.14)
+                                    : const Color(0xFFDCE4F0),
+                              ),
+                            ),
+                            suffixIcon: _searchController.text.isNotEmpty
+                                ? IconButton(
+                                    icon: const Icon(Icons.clear, size: 18),
+                                    onPressed: () {
+                                      _searchController.clear();
+                                      reloadData();
+                                    },
+                                  )
+                                : null,
                           ),
                         ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(18),
-                          borderSide: BorderSide(
-                            color: isDark
-                                ? Colors.white.withValues(alpha: 0.14)
-                                : const Color(0xFFDCE4F0),
+                      ),
+                      const SizedBox(width: 6),
+                      ElevatedButton.icon(
+                        onPressed: reloadData,
+                        icon: const Icon(Icons.search, size: 17),
+                        label: const Text('Tìm'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 10,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
                         ),
-                        suffixIcon: _searchController.text.isNotEmpty
-                            ? IconButton(
-                                icon: const Icon(Icons.clear, size: 18),
-                                onPressed: () {
-                                  _searchController.clear();
-                                  reloadData();
-                                },
-                              )
-                            : null,
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  ElevatedButton.icon(
-                    onPressed: reloadData,
-                    icon: const Icon(Icons.search, size: 17),
-                    label: const Text('Tìm'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 10,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 2),
-                  PopupMenuButton<String>(
-                    tooltip: 'Tùy chọn sổ tay',
-                    icon: const Icon(Icons.more_vert),
-                    onSelected: (value) {
-                      if (value == 'clear_history') {
-                        _confirmClearHistory();
-                      } else if (value == 'refresh') {
-                        reloadData();
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(
-                        value: 'refresh',
-                        child: Row(
-                          children: [
-                            Icon(Icons.refresh, size: 18),
-                            SizedBox(width: 8),
-                            Flexible(child: Text('Làm mới danh sách')),
-                          ],
-                        ),
-                      ),
-                      PopupMenuItem(
-                        value: 'clear_history',
-                        child: Row(
-                          children: [
-                            Icon(Icons.delete_sweep_outlined, size: 18, color: Colors.red),
-                            SizedBox(width: 8),
-                            Flexible(child: Text('Xóa toàn bộ lịch sử tra cứu')),
-                          ],
-                        ),
+                      const SizedBox(width: 2),
+                      PopupMenuButton<String>(
+                        tooltip: 'Tùy chọn sổ tay',
+                        icon: const Icon(Icons.more_vert),
+                        onSelected: (value) {
+                          if (value == 'clear_history') {
+                            _confirmClearHistory();
+                          } else if (value == 'refresh') {
+                            reloadData();
+                          }
+                        },
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
+                            value: 'refresh',
+                            child: Row(
+                              children: [
+                                Icon(Icons.refresh, size: 18),
+                                SizedBox(width: 8),
+                                Flexible(child: Text('Làm mới danh sách')),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem(
+                            value: 'clear_history',
+                            child: Row(
+                              children: [
+                                Icon(Icons.delete_sweep_outlined,
+                                    size: 18, color: Colors.red),
+                                SizedBox(width: 8),
+                                Flexible(
+                                    child: Text('Xóa toàn bộ lịch sử tra cứu')),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),
+                  if (myStudentCode != null || isStudent) ...[
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 6,
+                        children: [
+                          if (myStudentCode != null)
+                            ActionChip(
+                              avatar: Icon(
+                                isFilteringMyStudentCode
+                                    ? Icons.check_circle
+                                    : Icons.school_outlined,
+                                size: 16,
+                                color: isFilteringMyStudentCode
+                                    ? Colors.teal
+                                    : Colors.blueAccent,
+                              ),
+                              label: Text(
+                                isFilteringMyStudentCode
+                                    ? 'Đang lọc văn bằng của tôi ($myStudentCode) • Nhấn để bỏ lọc'
+                                    : '🎓 Văn bằng của tôi (MSSV: $myStudentCode)',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              onPressed: () {
+                                if (isFilteringMyStudentCode) {
+                                  _searchController.clear();
+                                } else {
+                                  _searchController.text = myStudentCode;
+                                }
+                                reloadData();
+                              },
+                            ),
+                          if (isStudent)
+                            ActionChip(
+                              avatar: const Icon(
+                                Icons.send_and_archive,
+                                size: 16,
+                                color: Colors.teal,
+                              ),
+                              label: const Text(
+                                'Gửi yêu cầu ký tài liệu',
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        const SubmitSigningRequestScreen(),
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
-              if (myStudentCode != null || isStudent) ...[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      if (myStudentCode != null)
-                        ActionChip(
-                          avatar: Icon(
-                            isFilteringMyStudentCode
-                                ? Icons.check_circle
-                                : Icons.school_outlined,
-                            size: 16,
-                            color: isFilteringMyStudentCode
-                                ? Colors.teal
-                                : Colors.blueAccent,
-                          ),
-                          label: Text(
-                            isFilteringMyStudentCode
-                                ? 'Đang lọc văn bằng của tôi ($myStudentCode) • Nhấn để bỏ lọc'
-                                : '🎓 Văn bằng của tôi (MSSV: $myStudentCode)',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onPressed: () {
-                            if (isFilteringMyStudentCode) {
-                              _searchController.clear();
-                            } else {
-                              _searchController.text = myStudentCode;
-                            }
-                            reloadData();
-                          },
-                        ),
-                      if (isStudent)
-                        ActionChip(
-                          avatar: const Icon(
-                            Icons.send_and_archive,
-                            size: 16,
-                            color: Colors.teal,
-                          ),
-                          label: const Text(
-                            'Gửi yêu cầu ký tài liệu',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    const SubmitSigningRequestScreen(),
-                              ),
-                            );
-                          },
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-              const SizedBox(height: 10),
-              Container(
-                padding: const EdgeInsets.all(4),
-                decoration: BoxDecoration(
-                  color: isDark
-                      ? const Color(0xFF18181A)
-                      : const Color(0xFFF7F6F2),
-                  borderRadius: BorderRadius.circular(999),
-                  border: Border.all(
+            ),
+          ),
+          SliverPersistentHeader(
+            pinned: true,
+            delegate: _VaultTabBarHeaderDelegate(
+              height: 58,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
                     color: isDark
-                        ? Colors.white.withValues(alpha: 0.12)
-                        : const Color(0xFFD6D4CC),
-                  ),
-                ),
-                child: TabBar(
-                  dividerColor: Colors.transparent,
-                  splashFactory: NoSplash.splashFactory,
-                  overlayColor: WidgetStateProperty.all(Colors.transparent),
-                  indicatorSize: TabBarIndicatorSize.tab,
-                  indicatorAnimation: TabIndicatorAnimation.elastic,
-                  indicator: BoxDecoration(
-                    color: isDark
-                        ? const Color(0xFFECEBE6)
-                        : const Color(0xFF565C43),
+                        ? const Color(0xFF18181A)
+                        : const Color(0xFFF7F6F2),
                     borderRadius: BorderRadius.circular(999),
-                    boxShadow: [
-                      BoxShadow(
-                        color: isDark
-                            ? Colors.white.withValues(alpha: 0.18)
-                            : Colors.black.withValues(alpha: 0.15),
-                        blurRadius: 10,
-                      ),
-                    ],
+                    border: Border.all(
+                      color: isDark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : const Color(0xFFD6D4CC),
+                    ),
                   ),
-                  labelColor: isDark
-                      ? const Color(0xFF141416)
-                      : const Color(0xFFECEBE6),
-                  unselectedLabelColor:
-                      isDark ? Colors.white70 : const Color(0xFF5C5B57),
-                  tabs: [
-                    Tab(
-                      height: 38,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.bookmark_added_outlined, size: 17),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Sổ tay (${_certificates.length})',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ],
+                  child: TabBar(
+                    dividerColor: Colors.transparent,
+                    splashFactory: NoSplash.splashFactory,
+                    overlayColor: WidgetStateProperty.all(Colors.transparent),
+                    indicatorSize: TabBarIndicatorSize.tab,
+                    indicatorAnimation: TabIndicatorAnimation.elastic,
+                    indicator: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFFECEBE6)
+                          : const Color(0xFF565C43),
+                      borderRadius: BorderRadius.circular(999),
+                      boxShadow: [
+                        BoxShadow(
+                          color: isDark
+                              ? Colors.white.withValues(alpha: 0.18)
+                              : Colors.black.withValues(alpha: 0.15),
+                          blurRadius: 10,
                         ),
-                      ),
+                      ],
                     ),
-                    Tab(
-                      height: 38,
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.history, size: 17),
-                            const SizedBox(width: 6),
-                            Text(
-                              'Lịch sử (${_scanHistory.length})',
-                              style: const TextStyle(fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    if (isStudent)
+                    labelColor: isDark
+                        ? const Color(0xFF141416)
+                        : const Color(0xFFECEBE6),
+                    unselectedLabelColor:
+                        isDark ? Colors.white70 : const Color(0xFF5C5B57),
+                    tabs: [
                       Tab(
                         height: 38,
                         child: FittedBox(
@@ -446,38 +422,70 @@ class VaultTabState extends State<VaultTab> {
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              const Icon(Icons.verified_outlined, size: 17),
+                              const Icon(Icons.bookmark_added_outlined, size: 17),
                               const SizedBox(width: 6),
                               Text(
-                                'Đã ký (${_mySignedCerts.length})',
-                                style:
-                                    const TextStyle(fontWeight: FontWeight.w600),
+                                'Sổ tay (${_certificates.length})',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
                               ),
                             ],
                           ),
                         ),
                       ),
-                  ],
+                      Tab(
+                        height: 38,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(Icons.history, size: 17),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Lịch sử (${_scanHistory.length})',
+                                style: const TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      if (isStudent)
+                        Tab(
+                          height: 38,
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.verified_outlined, size: 17),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Đã ký (${_mySignedCerts.length})',
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w600),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-            ],
+            ),
           ),
-        ),
-
+        ],
         // Nội dung các ngăn: Bắt buộc bọc OrientationBuilder (1 cột dọc <-> 2 cột ngang)
-        Expanded(
-          child: _isLoading
-              ? const Center(child: CircularProgressIndicator())
-              : TabBarView(
-                  children: [
-                    _buildCertificatesVaultView(),
-                    _buildScanHistoryView(),
-                    if (isStudent) _buildMySignedCertificatesView(),
-                  ],
-                ),
-        ),
-      ],
-    ),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : TabBarView(
+                children: [
+                  _buildCertificatesVaultView(),
+                  _buildScanHistoryView(),
+                  if (isStudent) _buildMySignedCertificatesView(),
+                ],
+              ),
+      ),
     );
   }
 
@@ -536,6 +544,7 @@ class VaultTabState extends State<VaultTab> {
 
               if (columnCount == 1) {
                 return ListView.separated(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(12),
                   itemCount: pagedSigned.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -560,6 +569,7 @@ class VaultTabState extends State<VaultTab> {
               }
 
               return GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(12),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -649,6 +659,7 @@ class VaultTabState extends State<VaultTab> {
 
               if (columnCount == 1) {
                 return ListView.separated(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   padding: const EdgeInsets.all(12),
                   itemCount: pagedCerts.length,
                   separatorBuilder: (_, _) => const SizedBox(height: 12),
@@ -665,6 +676,7 @@ class VaultTabState extends State<VaultTab> {
 
               // Chế độ xoay ngang (Landscape): GridView 2 cột với mainAxisExtent chống tràn pixel
               return GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(12),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 2,
@@ -765,6 +777,7 @@ class VaultTabState extends State<VaultTab> {
 
                           if (columnCount == 1) {
                             return ListView.separated(
+                              physics: const AlwaysScrollableScrollPhysics(),
                               padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                               itemCount: pagedHistory.length,
                               separatorBuilder: (_, _) =>
@@ -776,6 +789,7 @@ class VaultTabState extends State<VaultTab> {
 
                           // Khi xoay ngang: hiển thị 2 cột bằng GridView.builder
                           return GridView.builder(
+                            physics: const AlwaysScrollableScrollPhysics(),
                             padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
@@ -949,6 +963,36 @@ class VaultTabState extends State<VaultTab> {
         ),
       ),
     );
+  }
+}
+
+class _VaultTabBarHeaderDelegate extends SliverPersistentHeaderDelegate {
+  final double height;
+  final Widget child;
+
+  const _VaultTabBarHeaderDelegate({
+    required this.height,
+    required this.child,
+  });
+
+  @override
+  double get minExtent => height;
+
+  @override
+  double get maxExtent => height;
+
+  @override
+  Widget build(
+    BuildContext context,
+    double shrinkOffset,
+    bool overlapsContent,
+  ) {
+    return SizedBox.expand(child: child);
+  }
+
+  @override
+  bool shouldRebuild(covariant _VaultTabBarHeaderDelegate oldDelegate) {
+    return height != oldDelegate.height || child != oldDelegate.child;
   }
 }
 

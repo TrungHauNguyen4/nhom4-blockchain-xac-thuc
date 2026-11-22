@@ -8,6 +8,8 @@ import '../services/hash_service.dart';
 class ProgressStreamCard extends StatelessWidget {
   final Stream<VerificationProgress>? verificationStream;
   final Stream<NotarizationProgress>? notarizationStream;
+  final VerificationProgress? initialVerificationData;
+  final NotarizationProgress? initialNotarizationData;
   final ValueChanged<VerificationProgress>? onCompleted;
   final ValueChanged<VerificationProgress>? onViewVerificationDetail;
   final ValueChanged<NotarizationProgress>? onNotarizationCompleted;
@@ -16,10 +18,12 @@ class ProgressStreamCard extends StatelessWidget {
   const ProgressStreamCard({
     super.key,
     required Stream<VerificationProgress> stream,
+    this.initialVerificationData,
     this.onCompleted,
     ValueChanged<VerificationProgress>? onViewDetail,
   })  : verificationStream = stream,
         notarizationStream = null,
+        initialNotarizationData = null,
         onViewVerificationDetail = onViewDetail,
         onNotarizationCompleted = null;
 
@@ -27,19 +31,23 @@ class ProgressStreamCard extends StatelessWidget {
   const ProgressStreamCard.verification({
     super.key,
     required Stream<VerificationProgress> stream,
+    this.initialVerificationData,
     this.onCompleted,
     this.onViewVerificationDetail,
   })  : verificationStream = stream,
         notarizationStream = null,
+        initialNotarizationData = null,
         onNotarizationCompleted = null;
 
   /// Constructor định danh cho luồng Cấp phát / Ký số Blockchain (TV1 & TV2)
   const ProgressStreamCard.notarization({
     super.key,
     required Stream<NotarizationProgress> stream,
+    this.initialNotarizationData,
     this.onNotarizationCompleted,
   })  : notarizationStream = stream,
         verificationStream = null,
+        initialVerificationData = null,
         onCompleted = null,
         onViewVerificationDetail = null;
 
@@ -61,6 +69,7 @@ class ProgressStreamCard extends StatelessWidget {
   ) {
     return StreamBuilder<VerificationProgress>(
       stream: stream,
+      initialData: initialVerificationData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return _buildLoadingCard('Đang bắt đầu kiểm tra văn bằng...');
@@ -123,6 +132,7 @@ class ProgressStreamCard extends StatelessWidget {
   ) {
     return StreamBuilder<NotarizationProgress>(
       stream: stream,
+      initialData: initialNotarizationData,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return _buildLoadingCard('Đang chuẩn bị cấp phát văn bằng...');

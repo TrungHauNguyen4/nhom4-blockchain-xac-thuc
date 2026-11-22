@@ -18,12 +18,14 @@ import 'package:nhom4_lap_trinh_mobile/screens/issuer/issue_certificate_screen.d
 import 'package:nhom4_lap_trinh_mobile/screens/issuer/issued_list_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/vault/vault_tab.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/verifier/public_portfolio_screen.dart';
+import 'package:nhom4_lap_trinh_mobile/screens/verifier/verify_tab.dart';
 import 'package:nhom4_lap_trinh_mobile/screens/verify_detail_screen.dart';
 import 'package:nhom4_lap_trinh_mobile/services/api_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/certificate_firebase_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/hash_service.dart';
 import 'package:nhom4_lap_trinh_mobile/services/local_file_save_service.dart';
 import 'package:nhom4_lap_trinh_mobile/widgets/pagination_controls.dart';
+import 'package:nhom4_lap_trinh_mobile/widgets/progress_stream_card.dart';
 import 'package:nhom4_lap_trinh_mobile/widgets/twinkling_dot_matrix_background.dart';
 
 class _FakeLedgerApiService extends ApiService {
@@ -1104,6 +1106,89 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Kỹ sư Khoa học máy tính'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets(
+      'VerifyTab Rotation - Xoay ngang rồi xoay dọc lại không lỗi Stream has already been listened to',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    await tester.pumpWidget(
+      const MaterialApp(home: Scaffold(body: VerifyTab())),
+    );
+    await tester.pumpAndSettle();
+
+    // Nhập mã hash bất kỳ và bấm tìm kiếm để kích hoạt ProgressStreamCard
+    await tester.enterText(
+      find.byType(TextField),
+      '0x1111111111111111111111111111111111111111111111111111111111111111',
+    );
+    await tester.tap(find.byIcon(Icons.search).last);
+    await tester.pump(const Duration(milliseconds: 200));
+
+    // Xoay ngang
+    await tester.binding.setSurfaceSize(const Size(800, 400));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+
+    // Xoay dọc trở lại
+    await tester.binding.setSurfaceSize(const Size(400, 800));
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.takeException(), isNull);
+    expect(find.byType(ProgressStreamCard), findsOneWidget);
+  });
+
+  testWidgets(
+      'VaultTab Landscape Scroll - Xoay ngang vẫn kéo xuống xem được danh sách văn bằng',
+      (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({});
+    await tester.binding.setSurfaceSize(const Size(800, 360));
+    addTearDown(() => tester.binding.setSurfaceSize(null));
+
+    final fakeApi = _FakeLedgerApiService();
+    await fakeApi.notarizeCertificate(
+      dataHash:
+          '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+      fileName: 'Bang_Cu_Nhan.pdf',
+      studentName: 'Sinh Viên Xoay Ngang',
+      studentCode: '0023411914',
+      degreeName: 'Cử nhân Công nghệ thông tin',
+      issuerName: 'Đại học Đồng Tháp',
+    );
+
+    final student = UserModel(
+      uid: 'sv_vault_landscape',
+      name: 'Sinh Viên Xoay Ngang',
+      email: 'sv2@dthu.edu.vn',
+      role: UserRole.student,
+      studentCode: '0023411914',
+      organization: 'Đại học Đồng Tháp',
+      createdAt: '2026-01-01',
+    );
+    final authProvider = _createAuthenticatedTestProvider(student);
+
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          Provider<ApiService>.value(value: fakeApi),
+          ChangeNotifierProvider<AuthProvider>.value(value: authProvider),
+        ],
+        child: const MaterialApp(home: Scaffold(body: VaultTab())),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Đã ký (1)'));
+    await tester.pumpAndSettle();
+
+    // Kéo màn hình xuống để NestedScrollView cuộn phần header lên
+    await tester.drag(find.byType(NestedScrollView), const Offset(0, -140));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Cử nhân Công nghệ thông tin'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
