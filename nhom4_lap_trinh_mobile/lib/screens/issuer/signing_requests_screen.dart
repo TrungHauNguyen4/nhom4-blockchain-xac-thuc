@@ -351,80 +351,81 @@ class _SigningRequestsScreenState extends State<SigningRequestsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final body = Column(
-      children: [
-        Material(
-          color: Theme.of(context).colorScheme.surface,
-          child: Column(
-            children: [
-              TabBar(
-                controller: _tabController,
-                tabs: const [
-                  Tab(icon: Icon(Icons.school_outlined), text: 'Cá nhân (SV)'),
-                  Tab(
-                    icon: Icon(Icons.business_outlined),
-                    text: 'Nhà tuyển dụng',
-                  ),
-                ],
-              ),
-              Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      _buildFilterChip('all', 'Tất cả'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('pending', 'Đang chờ / Gia hạn'),
-                      const SizedBox(width: 8),
-                      _buildFilterChip('signed', 'Đã ký'),
-                    ],
+    final body = NestedScrollView(
+      headerSliverBuilder: (context, innerBoxIsScrolled) => [
+        SliverToBoxAdapter(
+          child: Material(
+            color: Theme.of(context).colorScheme.surface,
+            child: Column(
+              children: [
+                TabBar(
+                  controller: _tabController,
+                  tabs: const [
+                    Tab(
+                        icon: Icon(Icons.school_outlined),
+                        text: 'Cá nhân (SV)'),
+                    Tab(
+                      icon: Icon(Icons.business_outlined),
+                      text: 'Nhà tuyển dụng',
+                    ),
+                  ],
+                ),
+                Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      children: [
+                        _buildFilterChip('all', 'Tất cả'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip('pending', 'Đang chờ / Gia hạn'),
+                        const SizedBox(width: 8),
+                        _buildFilterChip('signed', 'Đã ký'),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-            ],
-          ),
-        ),
-        Expanded(
-          child: StreamBuilder<List<SigningRequestModel>>(
-            stream: _service.streamAllRequests(),
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting &&
-                  !snapshot.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final all = snapshot.data ?? const <SigningRequestModel>[];
-              final studentList = _applyStatusFilter(
-                all.where((e) => e.isStudentRequest).toList(growable: false),
-              );
-              final employerList = _applyStatusFilter(
-                all.where((e) => e.isEmployerRequest).toList(growable: false),
-              );
-
-              return TabBarView(
-                controller: _tabController,
-                children: [
-                  _buildPagedRequestList(
-                    items: studentList,
-                    currentPage: _studentPage,
-                    onPageChanged: (p) => setState(() => _studentPage = p),
-                    emptyMessage:
-                        'Chưa có yêu cầu ký nào từ tài khoản Cá nhân (Sinh viên).',
-                  ),
-                  _buildPagedRequestList(
-                    items: employerList,
-                    currentPage: _employerPage,
-                    onPageChanged: (p) => setState(() => _employerPage = p),
-                    emptyMessage:
-                        'Chưa có yêu cầu ký nào từ Nhà tuyển dụng.',
-                  ),
-                ],
-              );
-            },
+              ],
+            ),
           ),
         ),
       ],
+      body: StreamBuilder<List<SigningRequestModel>>(
+        stream: _service.streamAllRequests(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              !snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final all = snapshot.data ?? const <SigningRequestModel>[];
+          final studentList = _applyStatusFilter(
+            all.where((e) => e.isStudentRequest).toList(growable: false),
+          );
+          final employerList = _applyStatusFilter(
+            all.where((e) => e.isEmployerRequest).toList(growable: false),
+          );
+
+          return TabBarView(
+            controller: _tabController,
+            children: [
+              _buildPagedRequestList(
+                items: studentList,
+                currentPage: _studentPage,
+                onPageChanged: (p) => setState(() => _studentPage = p),
+                emptyMessage:
+                    'Chưa có yêu cầu ký nào từ tài khoản Cá nhân (Sinh viên).',
+              ),
+              _buildPagedRequestList(
+                items: employerList,
+                currentPage: _employerPage,
+                onPageChanged: (p) => setState(() => _employerPage = p),
+                emptyMessage: 'Chưa có yêu cầu ký nào từ Nhà tuyển dụng.',
+              ),
+            ],
+          );
+        },
+      ),
     );
 
     if (widget.isEmbedded) {

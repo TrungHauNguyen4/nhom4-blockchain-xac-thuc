@@ -35,3 +35,7 @@ Thumbs.db
 **/*.jks
 **/*.keystore
 **/android/key.properties
+
+# 5. Báo cáo & sơ đồ Mermaid (chỉ lưu cục bộ, không đẩy lên Git)
+Khung_bao_cao/
+SO_DO_BAO_CAO_MERMAID.md

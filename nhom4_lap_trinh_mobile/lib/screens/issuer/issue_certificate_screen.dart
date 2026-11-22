@@ -51,6 +51,8 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
   StreamController<NotarizationProgress>? _notarizeController;
   StreamSubscription<NotarizationProgress>? _notarizeSub;
   Stream<NotarizationProgress>? _notarizeStream;
+  NotarizationProgress? _latestNotarizeProgress;
+  int _notarizeSessionId = 0;
   bool _isNotarizing = false;
 
   // Kết quả sau khi ký thành công hoặc lỗi trùng lặp
@@ -363,6 +365,8 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
       _isNotarizing = true;
       _completedProgress = null;
       _errorProgress = null;
+      _latestNotarizeProgress = null;
+      _notarizeSessionId++;
       _notarizeController = controller;
       _notarizeStream = controller.stream;
     });
@@ -382,6 +386,7 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
 
     _notarizeSub = sourceStream.listen(
       (progress) {
+        _latestNotarizeProgress = progress;
         if (!controller.isClosed) {
           controller.add(progress);
         }
@@ -916,7 +921,9 @@ class _IssueCertificateScreenState extends State<IssueCertificateScreen> {
         children: [
           if (_notarizeStream != null)
             ProgressStreamCard.notarization(
+              key: ValueKey('notarize_progress_$_notarizeSessionId'),
               stream: _notarizeStream!,
+              initialNotarizationData: _latestNotarizeProgress,
             ),
           if (_completedProgress != null &&
               _completedProgress!.step == NotarizationStep.completed) ...[

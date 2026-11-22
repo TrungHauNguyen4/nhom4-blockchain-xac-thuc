@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -27,8 +28,12 @@ class _VerifyTabState extends State<VerifyTab> {
   final ImagePicker _imagePicker = ImagePicker();
   final TextEditingController _hashInputController = TextEditingController();
 
-  // Luồng tiến trình băm & đối soát cho StreamBuilder
+  // Luồng tiến trình băm & đối soát dùng broadcast để an toàn khi xoay màn hình
+  StreamController<VerificationProgress>? _verificationController;
+  StreamSubscription<VerificationProgress>? _verificationSub;
   Stream<VerificationProgress>? _verificationStream;
+  VerificationProgress? _latestVerificationProgress;
+  int _verificationSessionId = 0;
 
   // Thông tin file đang nạp trên RAM
   String? _selectedFileName;
@@ -43,8 +48,53 @@ class _VerifyTabState extends State<VerifyTab> {
 
   @override
   void dispose() {
+    _disposeVerificationStream();
     _hashInputController.dispose();
     super.dispose();
+  }
+
+  void _disposeVerificationStream() {
+    _verificationSub?.cancel();
+    _verificationSub = null;
+    if (_verificationController != null && !_verificationController!.isClosed) {
+      _verificationController!.close();
+    }
+    _verificationController = null;
+  }
+
+  void _startVerificationBroadcastStream(
+    Stream<VerificationProgress> sourceStream,
+  ) {
+    _disposeVerificationStream();
+    final controller = StreamController<VerificationProgress>.broadcast();
+    _verificationController = controller;
+    _verificationStream = controller.stream;
+    _latestVerificationProgress = null;
+    _verificationSessionId++;
+
+    _verificationSub = sourceStream.listen(
+      (progress) {
+        _latestVerificationProgress = progress;
+        if (!controller.isClosed) {
+          controller.add(progress);
+        }
+        if (mounted) {
+          setState(() {
+            _latestVerificationProgress = progress;
+          });
+        }
+      },
+      onError: (Object e, StackTrace st) {
+        if (!controller.isClosed) {
+          controller.addError(e, st);
+        }
+      },
+      onDone: () {
+        if (!controller.isClosed) {
+          controller.close();
+        }
+      },
+    );
   }
 
   // [THAO TÁC 1]: Chọn file PDF/Ảnh từ máy -> Đọc RAM (có fallback File(path) trên Android) -> Băm & Verify
@@ -122,11 +172,13 @@ class _VerifyTabState extends State<VerifyTab> {
       _currentScanFileName = fileName;
       _lastLoggedHashAndTime = null;
 
-      _verificationStream = _verifyFileWithOfflineFallback(
-        fileBytes: bytes,
-        fileName: fileName,
-        precomputedKeccak256: hashes.keccak256,
-        precomputedSha256: hashes.sha256,
+      _startVerificationBroadcastStream(
+        _verifyFileWithOfflineFallback(
+          fileBytes: bytes,
+          fileName: fileName,
+          precomputedKeccak256: hashes.keccak256,
+          precomputedSha256: hashes.sha256,
+        ),
       );
     });
   }
@@ -185,9 +237,11 @@ class _VerifyTabState extends State<VerifyTab> {
       _currentScanFileName = fileName;
       _lastLoggedHashAndTime = null;
 
-      _verificationStream = _verifyHashWithOfflineFallback(
-        dataHash: clean,
-        fileName: fileName,
+      _startVerificationBroadcastStream(
+        _verifyHashWithOfflineFallback(
+          dataHash: clean,
+          fileName: fileName,
+        ),
       );
     });
   }
@@ -350,7 +404,9 @@ class _VerifyTabState extends State<VerifyTab> {
                 if (_verificationStream != null) ...[
                   const SizedBox(height: 16),
                   ProgressStreamCard(
+                    key: ValueKey('verify_progress_$_verificationSessionId'),
                     stream: _verificationStream!,
+                    initialVerificationData: _latestVerificationProgress,
                     onCompleted: _recordScanHistoryOnDone,
                     onViewDetail: _openDetailScreen,
                   ),
@@ -398,7 +454,9 @@ class _VerifyTabState extends State<VerifyTab> {
                   ],
                   if (_verificationStream != null)
                     ProgressStreamCard(
+                      key: ValueKey('verify_progress_$_verificationSessionId'),
                       stream: _verificationStream!,
+                      initialVerificationData: _latestVerificationProgress,
                       onCompleted: _recordScanHistoryOnDone,
                       onViewDetail: _openDetailScreen,
                     )
